@@ -77,10 +77,14 @@ function GL.Update()
 end
 
 function GL.UpdateMock(pool, n)
-    local perCol = N.db.raid.unitsPerColumn or 5
+    local groups = {}
+    for g = 1, 8 do
+        if not N.RaidGroupAllowed or N.RaidGroupAllowed(g) then groups[#groups + 1] = g end
+    end
     local entries = {}
     for i = 1, n do
-        entries[#entries + 1] = { button = pool[i], group = math.floor((i - 1) / perCol) + 1 }
+        local group = groups[math.floor((i - 1) / 5) + 1] or (math.floor((i - 1) / 5) + 1)
+        entries[#entries + 1] = { button = pool[i], group = group }
     end
     apply(entries)
 end

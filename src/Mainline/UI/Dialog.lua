@@ -98,9 +98,11 @@ local close
 
 local function press(spec, btn)
     local text = spec.input and frame.edit:GetText() or nil
+    -- Read before closing: closing opens the next queued dialog, which reuses these buttons.
+    local onClick = btn and btn.onClick
     close()
-    if btn and btn.onClick then
-        local ok, err = pcall(btn.onClick, text)
+    if onClick then
+        local ok, err = pcall(onClick, text)
         if not ok then N:Print("|cffff5555dialog error:|r " .. tostring(err)) end
     end
 end
@@ -140,6 +142,42 @@ local function open(spec)
         b:Show()
     end
     for i = #list + 1, #f.buttons do f.buttons[i]:Hide() end
+
+    -- A secureMacro button is covered by a transparent secure button that runs the macro: addon
+    -- code may not call ReloadUI, a macro may /reload. The overlays sit on their own holder so
+    -- they go away with the dialog even in combat.
+    local holder = f.secureHolder
+    if not holder then
+        holder = CreateFrame("Frame", nil, f.box)
+        holder:SetAllPoints(f.box)
+        f.secureHolder = holder
+        f.secureBtns = {}
+    end
+    local useSecure = false
+    if not InCombatLockdown() then
+        for i, def in ipairs(list) do
+            local sb = f.secureBtns[i]
+            if def.secureMacro then
+                if not sb then
+                    sb = CreateFrame("Button", nil, holder, "SecureActionButtonTemplate")
+                    sb:RegisterForClicks("AnyUp")
+                    sb:SetAttribute("useOnKeyDown", false)
+                    sb:SetScript("PostClick", function() close() end)
+                    f.secureBtns[i] = sb
+                end
+                sb:SetAttribute("type", "macro")
+                sb:SetAttribute("macrotext", def.secureMacro)
+                sb:ClearAllPoints()
+                sb:SetAllPoints(f.buttons[i])
+                sb:SetFrameLevel(f.buttons[i]:GetFrameLevel() + 3)
+                sb:Show()
+                useSecure = true
+            elseif sb then
+                sb:Hide()
+            end
+        end
+    end
+    holder:SetShown(useSecure)
     local x = -PAD
     for i = #list, 1, -1 do
         local b = f.buttons[i]
@@ -171,7 +209,7 @@ local function open(spec)
         if key == "ESCAPE" then
             self:SetPropagateKeyboardInput(false)
             press(spec, #list > 1 and self.buttons[1] or self.buttons[#list])
-        elseif key == "ENTER" and not spec.input then
+        elseif key == "ENTER" and not spec.input and not (list[#list] and list[#list].secureMacro) then
             self:SetPropagateKeyboardInput(false)
             press(spec, self.buttons[#list])
         else
@@ -233,7 +271,8 @@ function D.Reload(text)
         text = text,
         buttons = {
             { text = L["Later"] },
-            { text = L["Reload now"], primary = true, onClick = function() ReloadUI() end },
+            { text = L["Reload now"], primary = true, secureMacro = "/reload",
+              onClick = function() ReloadUI() end },
         },
     })
 end

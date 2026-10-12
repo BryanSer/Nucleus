@@ -229,6 +229,28 @@ local function BuildPosition(p)
     c:AddRow(N.MakeCheckbox(c, L["Lock frames"],
         function() return N.db.locked end,
         function(v) N:Set("locked", v) end))
+    c:AddRow(N.MakeDropdown(c, L["Drag mode"], {
+        { value = "always", text = L["MOVER_ALWAYS"] },
+        { value = "alt", text = L["MOVER_ALT"] },
+    }, function() return N.db.moverMode or "always" end,
+       function(v) N:Set("moverMode", v) end))
+    c:AddRow(N.MakeDropdown(c, L["Mover style"], {
+        { value = "label", text = L["MOVER_STYLE_LABEL"] },
+        { value = "bar", text = L["MOVER_STYLE_BAR"] },
+    }, function() return N.db.moverStyle or "label" end,
+       function(v) N:Set("moverStyle", v) end))
+    c:AddRow(N.MakeSlider(c, L["Mover bar width"], 20, 400, 5,
+        function() return N.db.moverBarWidth or 100 end,
+        function(v) N:Set("moverBarWidth", N.Round(v)) end))
+    c:AddRow(N.MakeSlider(c, L["Mover X offset"], -300, 300, 1,
+        function() return N.db.moverX or 0 end,
+        function(v) N:Set("moverX", N.Round(v)) end))
+    c:AddRow(N.MakeSlider(c, L["Mover Y offset"], -300, 300, 1,
+        function() return N.db.moverY or 0 end,
+        function(v) N:Set("moverY", N.Round(v)) end))
+    c:AddRow(N.MakeSlider(c, L["Mover size"], 60, 250, 5,
+        function() return N.db.moverSize or 100 end,
+        function(v) N:Set("moverSize", N.Round(v)) end))
     local hint = N.FontString(c, 11)
     hint:SetPoint("TOPLEFT", N.CARD_PAD, c._y)
     hint:SetWidth(c:GetWidth() - 2 * N.CARD_PAD)
@@ -1156,8 +1178,14 @@ local function BuildAuras(p, key, kind)
         function() return o.max end, function(v) N:Set(pth("max"), N.Round(v)) end))
     c:AddRow(N.MakeSlider(c, L["Icon size"], 8, 48, 1,
         function() return o.size end, function(v) N:Set(pth("size"), N.Round(v)) end))
-    c:AddRow(N.MakeSlider(c, L["Spacing"], 0, 10, 1,
+    c:AddRow(N.MakeSlider(c, L["Spacing"], 0, 40, 1,
         function() return o.spacing end, function(v) N:Set(pth("spacing"), N.Round(v)) end))
+    if kind ~= "dispels" then
+        c:AddRow(N.MakeSlider(c, L["Icons per row"], 1, 8, 1,
+            function() return o.perRow or 8 end, function(v) N:Set(pth("perRow"), N.Round(v)) end))
+        c:AddRow(N.MakeSlider(c, L["Row spacing"], 0, 40, 1,
+            function() return o.lineSpacing or o.spacing end, function(v) N:Set(pth("lineSpacing"), N.Round(v)) end))
+    end
     c:AddRow(N.MakeDropdown(c, L["Anchor"], {
         { value = "BOTTOMLEFT", text = L["Bottom left"] },
         { value = "BOTTOMRIGHT", text = L["Bottom right"] },
@@ -1990,7 +2018,9 @@ local function BuildCustom(p, mode, id)
             slider(look, L["Icon size"], "size", 8, 48)
             if kind == "icons" then
                 slider(look, L["Max icons"], "max", 1, 8)
-                slider(look, L["Spacing"], "spacing", 0, 10)
+                slider(look, L["Spacing"], "spacing", 0, 40)
+                slider(look, L["Icons per row"], "perRow", 1, 8)
+                slider(look, L["Row spacing"], "lineSpacing", 0, 40)
                 look:AddRow(N.MakeDropdown(look, L["Growth direction"], {
                     { value = "RIGHT", text = L["Right"] }, { value = "LEFT", text = L["Left"] },
                     { value = "UP", text = L["Up"] }, { value = "DOWN", text = L["Down"] },

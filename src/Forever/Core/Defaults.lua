@@ -176,7 +176,7 @@ local function groupDefaults(overrides)
         -- frame corner and grown in a chosen direction.
         auras = {
             buffs = {
-                enabled = false, max = 3, size = 15, spacing = 2,
+                enabled = false, max = 3, size = 15, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "TOPRIGHT", growth = "LEFT", x = 0, y = 0,
                 showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, onlyMine = true,
                 -- useList: only the spells in `list` (healing buffs; the options show your
@@ -185,7 +185,7 @@ local function groupDefaults(overrides)
                 list = "1278914,33763,419207,1227806,8936,419287,774,419204,155777,474754,474750,48438,419344,355941,355936,382614,376788,364343,373267,366155,367364,409895,450769,450521,450711,450526,450531,1292922,124682,119611,115175,1260617,198533,156910,53563,200025,1244893,431381,156322,461432,432502,469703,194384,77489,17,1246768,1254306,1300008,41635,139,1253593,1300009,383648,974,444490,61295,360827,395152,395296,410089",
             },
             debuffs = {
-                enabled = true, max = 3, size = 18, spacing = 2,
+                enabled = true, max = 3, size = 18, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "BOTTOMLEFT", growth = "RIGHT", x = 0, y = 0,
                 showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, dispelBorder = true,
                 -- Filters: with showAll off only debuffs matching the ticked filters
@@ -205,7 +205,7 @@ local function groupDefaults(overrides)
                 -- Colour per dispel type (highlight, border, fallback type icons).
                 typeColors = { Magic = { 0.2, 0.6, 1 }, Curse = { 0.6, 0, 1 }, Disease = { 0.6, 0.4, 0 },
                                Poison = { 0, 0.6, 0 }, Bleed = { 1, 0.2, 0.6 } },
-                enabled = true, max = 3, size = 18, spacing = 2,
+                enabled = true, max = 3, size = 18, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "TOP", growth = "RIGHT", x = 0, y = 0,
                 -- Highlight on the health bar: "none" | "edge-top" | "edge-bottom" | "fill" |
                 -- "full" (opacity applies to fill / full). Border and dispel-type icons below.
@@ -220,19 +220,19 @@ local function groupDefaults(overrides)
             -- falls back to Blizzard's own classification (BIG_DEFENSIVE / EXTERNAL_DEFENSIVE).
             -- Defensives sit far left of the frame, externals far right.
             defensives = {
-                enabled = true, max = 2, size = 16, spacing = 2,
+                enabled = true, max = 2, size = 16, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "LEFT", growth = "RIGHT", x = 0, y = 6,
                 showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, useFilter = false,
                 list = "48707,444741,48792,55233,101568,212800,187827,207771,22812,22842,61336,1261872,404381,363916,374349,186265,264735,342246,45438,414658,449336,1309793,122783,115203,120954,125174,132578,322507,1241059,498,403876,642,31850,86659,212641,19236,47585,586,193065,27827,31224,5277,1966,185311,108271,260881,108416,104773,132413,387636,118038,184364,190456,1277297,147833,385391,871",
             },
             externals = {
-                enabled = true, max = 2, size = 16, spacing = 2,
+                enabled = true, max = 2, size = 16, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "RIGHT", growth = "LEFT", x = 0, y = 6,
                 showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, useFilter = false,
                 list = "102342,357170,53480,116849,1022,1309794,6940,204018,387804,47788,33206,145629,51052,209426,196718,374227,31821,317929,81782,62618,325174,98008,97463,97462",
             },
             offensives = {
-                enabled = false, max = 2, size = 18, spacing = 2,
+                enabled = false, max = 2, size = 18, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "BOTTOM", growth = "RIGHT", x = 0, y = 4,
                 showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1,
                 list = "1249658,152279,42650,51271,191427,321067,321068,162264,471306,1217605,473671,1217607,194223,102560,106951,102543,375087,186254,1235388,1285912,19574,288613,1250646,1251703,190319,365350,365362,1247908,1249625,31884,231895,454351,216331,10060,194249,13750,121471,1249810,114050,114051,114052,1219480,466772,442726,1276166,266087,417282,107574,1719,1225789,1241937,1265063,459808,1234189,185422,51690,394095,385627,13877,265187,205180,111685,446035,227847",
@@ -240,7 +240,7 @@ local function groupDefaults(overrides)
             -- Crowd controls come from Blizzard's CROWD_CONTROL aura filter, so there is
             -- deliberately no spell list.
             crowdControls = {
-                enabled = false, max = 3, size = 22, spacing = 2,
+                enabled = false, max = 3, size = 22, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "CENTER", growth = "RIGHT", x = 0, y = 0,
                 showStacks = false, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, dispellableOnly = false,
             },
@@ -290,6 +290,12 @@ N.Defaults = {
 
     locale = "deDE",
     locked = true,
+    moverMode = "always", -- how the move handle is dragged: always | alt
+    moverSize = 100,
+    moverStyle = "label", -- label (name tab) | bar
+    moverBarWidth = 100,
+    moverX = 0,
+    moverY = 0,
     translitNames = false,
     welcomeMessage = true, -- the "Nucleus loaded - version X" line in the chat at login / reload
     firstRunShown = false, -- the one-time welcome window has been shown
@@ -319,7 +325,8 @@ N.Defaults = {
 
     minimap = {
         hide = false,
-        angle = 205,
+        angle = 205,    -- own button (used when LibDBIcon is missing)
+        minimapPos = 205, -- LibDBIcon's position
     },
 
     party = groupDefaults({

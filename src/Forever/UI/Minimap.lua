@@ -1,7 +1,8 @@
 local _, ns = ...
 local N = ns.N
 
--- Standalone minimap button (no LibDBIcon).
+-- Minimap button: a LibDBIcon button, so button managers can group it. Without the library a
+-- plain button of our own is used.
 
 local MB = {}
 N.Minimap = MB
@@ -80,14 +81,43 @@ local function create()
     updatePosition()
 end
 
+local DBI_NAME = "Nucleus"
+local useLib
+
+local function createLib()
+    local LDB = LibStub and LibStub("LibDataBroker-1.1", true)
+    local DBI = LibStub and LibStub("LibDBIcon-1.0", true)
+    if not (LDB and DBI) then return false end
+    local db = N.db.minimap
+    if not db.minimapPos then db.minimapPos = db.angle or 205 end
+    local obj = LDB:GetDataObjectByName(DBI_NAME) or LDB:NewDataObject(DBI_NAME, {
+        type = "launcher",
+        text = "Nucleus",
+        icon = N.Media.tex.logo,
+        OnClick = function() N.ToggleOptions() end,
+        OnTooltipShow = function(tt)
+            tt:AddLine("Nucleus")
+            tt:AddLine("|cffbbbbbbClick:|r Options", 1, 1, 1)
+        end,
+    })
+    if not DBI:IsRegistered(DBI_NAME) then DBI:Register(DBI_NAME, obj, db) end
+    return true
+end
+
 function MB.Refresh()
+    if useLib then
+        local DBI = LibStub("LibDBIcon-1.0", true)
+        if N.db.minimap.hide then DBI:Hide(DBI_NAME) else DBI:Show(DBI_NAME) end
+        return
+    end
     if not button then return end
     button:SetShown(not N.db.minimap.hide)
     updatePosition()
 end
 
 function MB.Init()
-    create()
+    useLib = createLib()
+    if not useLib then create() end
     MB.Refresh()
     N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
         if path == "minimap.hide" then MB.Refresh() end

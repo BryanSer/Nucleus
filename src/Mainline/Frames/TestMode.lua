@@ -82,7 +82,15 @@ local function mockAuras(i)
     return buffs, debuffs, dispels, defensives, externals, offensives, crowd
 end
 
-local function mockFor(i)
+-- Party: 1 tank, 1 healer, 3 damage dealers; other groups cycle through the roles.
+local ROLE_CYCLE = { "TANK", "HEALER", "DAMAGER" }
+local PARTY_ROLES = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
+local function roleOf(i, key)
+    if key == "party" then return PARTY_ROLES[(i - 1) % #PARTY_ROLES + 1] end
+    return ROLE_CYCLE[(i - 1) % 3 + 1]
+end
+
+local function mockFor(i, key)
     local buffs, debuffs, dispels, defensives, externals, offensives, crowd = mockAuras(i)
     return {
         buffs = buffs,
@@ -105,10 +113,10 @@ local function mockFor(i)
         hp = (i % 11 == 0) and 0 or ((i * 37) % 83) + 18,
         ppMax = 100,
         pp = (i * 53) % 101,
-        ppType = mockPower(CLASSES[(i - 1) % #CLASSES + 1], ({ "TANK", "HEALER", "DAMAGER" })[(i - 1) % 3 + 1]),
+        ppType = mockPower(CLASSES[(i - 1) % #CLASSES + 1], roleOf(i, key)),
         dead = (i % 11 == 0),
         aggro = (i == 1),
-        role = ({ "TANK", "HEALER", "DAMAGER" })[(i - 1) % 3 + 1],
+        role = roleOf(i, key),
         isLeader = (i == 1),
         incHeal = (i % 4 == 0) and 30 or 0,
         absorb = (i % 5 == 0) and 35 or 0,
@@ -129,7 +137,14 @@ local function count(key)
     if key == "ownPet" or key == "npc" then return 1 end
     if key == "groupPets" then return 4 end
     if key == "spotlight" then return 3 end
-    return math.min(cfg.maxColumns, 4) * cfg.unitsPerColumn
+    if key == "raid" then
+        local groups = 0
+        for g = 1, 8 do
+            if not N.RaidGroupAllowed or N.RaidGroupAllowed(g) then groups = groups + 1 end
+        end
+        return math.max(1, groups) * 5
+    end
+    return math.min(cfg.maxColumns, 8) * cfg.unitsPerColumn
 end
 
 local function place(container, key, pool, n)
@@ -138,7 +153,7 @@ local function place(container, key, pool, n)
     local colSp = cfg.columnSpacing or sp
     local horizontal = cfg.orientation == "horizontal"
     local rev = cfg.reverse
-    local perCol = (key == "raid") and cfg.unitsPerColumn or n
+    local perCol = (key == "raid") and (cfg.groupBy == "GROUP" and 5 or cfg.unitsPerColumn) or n
 
     local anchor = "TOPLEFT"
     if rev then anchor = horizontal and "TOPRIGHT" or "BOTTOMLEFT" end
@@ -169,19 +184,23 @@ local function makeHandle(container, key)
     container:SetMovable(true)
     container:SetClampedToScreen(true)
     local a = CreateFrame("Button", nil, container)
-    a:SetPoint("BOTTOM", container, "TOP", 0, 2)
-    a:SetSize(150, 20)
     a:SetFrameStrata("HIGH")
     a:EnableMouse(true)
     N.SkinPanel(a, { 0.10, 0.10, 0.10, 0.95 }, M.color.accent)
-    local label = N.FontString(a, 11)
+    local label = N.FontString(a, 10)
     label:SetPoint("CENTER")
     label:SetTextColor(M.color.accentBright[1], M.color.accentBright[2], M.color.accentBright[3])
-    label:SetText(N.L[({ party = "Party Frames", raid = "Raid Frames", ownPet = "Own Pet Frame",
-        groupPets = "Group Pet Frames", npc = "NPC Companion Frames", spotlight = "Spotlight Frame" })[key]])
+    local title = N.L[({ party = "Party Frames", raid = "Raid Frames", ownPet = "Own Pet Frame",
+        groupPets = "Group Pet Frames", npc = "NPC Companion Frames", spotlight = "Spotlight Frame" })[key]]
+    N.StyleMover(a, label, title, container)
+    a._restyle = function() N.StyleMover(a, label, title, container) end
     a:RegisterForDrag("LeftButton")
-    a:SetScript("OnDragStart", function() container:StartMoving() end)
+    a:SetScript("OnDragStart", function()
+        if N.MoverMayDrag() then container:StartMoving(); a._moving = true end
+    end)
     a:SetScript("OnDragStop", function()
+        if not a._moving then return end
+        a._moving = nil
         container:StopMovingOrSizing()
         local x = N.Round(container:GetLeft())
         local y = N.Round(container:GetTop() - UIParent:GetHeight())
@@ -192,9 +211,43 @@ local function makeHandle(container, key)
 end
 
 local function syncHandles()
-    for _, c in pairs(containers) do
-        if c.handle then c.handle:SetShown(active and not N.db.locked and not c.attachPreview) end
+    for key, c in pairs(containers) do
+        if c.handle then
+            c.handle:SetShown(active and not N.db.locked and not c.attachPreview and N.MoverWanted(key))
+            if c.handle._restyle then c.handle._restyle() end
+        end
     end
+end
+
+-- The mock players in the order the custom sorting (Appearance > Layout > Sorting) would put them:
+-- pinned names first, then by role. Slot i shows mock player order[i].
+local function testOrder(key, n)
+    local order = {}
+    for i = 1, n do order[i] = i end
+    local o = N.db[key] and N.db[key].ordering
+    if not (o and o.enabled) then return order end
+    local rank = { [o.first or "TANK"] = 1, [o.second or "HEALER"] = 2, [o.third or "DAMAGER"] = 3 }
+    local pins = {}
+    for tok in (o.pinned or ""):gmatch("[^,;\n]+") do
+        tok = strtrim(tok):lower()
+        if tok ~= "" then pins[#pins + 1] = tok end
+    end
+    local function pinIndex(i)
+        local name = NAMES[(i - 1) % #NAMES + 1]:lower()
+        for k, pin in ipairs(pins) do
+            if pin == name then return k end
+        end
+        return 1000
+    end
+    local function rankOf(i) return rank[roleOf(i, key)] or 4 end
+    table.sort(order, function(a, b)
+        local pa, pb = pinIndex(a), pinIndex(b)
+        if pa ~= pb then return pa < pb end
+        local ra, rb = rankOf(a), rankOf(b)
+        if ra ~= rb then return ra < rb end
+        return a < b
+    end)
+    return order
 end
 
 local PET_NAMES = { ownPet = { "Fenrir" }, groupPets = { "Spirit Wolf", "Imp", "Ghoul", "Water Elemental" }, npc = { "Brann" } }
@@ -216,6 +269,7 @@ local function buildKey(key, force)
 
     local pool = pools[key]
     local n = count(key)
+    local order = (key == "party" or key == "raid") and testOrder(key, n) or nil
     for i = 1, n do
         local b = pool[i]
         if not b then
@@ -226,7 +280,7 @@ local function buildKey(key, force)
         end
         UF.LayoutBars(b)
         b:Show()
-        local mock = mockFor(i)
+        local mock = mockFor(order and order[i] or i, key)
         if N.PET_KEYS[key] then
             mock.name = PET_NAMES[key][(i - 1) % #PET_NAMES[key] + 1]
             mock.role, mock.isLeader, mock.readyCheck, mock.raidMarker = nil, false, nil, nil
@@ -321,7 +375,10 @@ function TM.Init()
         end
     end)
     N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
-        if path == "locked" then syncHandles() end
+        if path == "locked" or path == "moverMode" or path == "moverSize" or path == "moverStyle"
+            or path == "moverBarWidth" or path == "moverX" or path == "moverY" then
+            syncHandles()
+        end
     end)
     N:On("NUCLEUS_EDIT_MODE", function()
         if active then rebuild() end

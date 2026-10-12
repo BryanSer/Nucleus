@@ -965,7 +965,7 @@ local function rowSpec(b, row, cfg)
     local appearance = N.db[b.groupKey].appearance
     local spec = {
         shape = "icon", size = cfg.size, spacing = cfg.spacing, point = cfg.point, x = cfg.x, y = cfg.y,
-        growth = cfg.growth, max = cfg.max,
+        growth = cfg.growth, max = cfg.max, perRow = cfg.perRow, lineSpacing = cfg.lineSpacing,
         cd = cfg.showCooldown and (cfg.cdStyle or "spiral") or "none",
         stacks = cfg.showStacks, time = cfg.showTime,
         timeSize = cfg.timeSize, timeX = cfg.timeX, timeY = cfg.timeY,
@@ -1076,12 +1076,8 @@ function A.Layout(b)
             ic:SetSize(cfg.size, cfg.size)
             styleTexts(ic, cfg)
             ic:ClearAllPoints()
-            local off = (i - 1) * (cfg.size + cfg.spacing)
-            local dx, dy = 0, 0
-            if cfg.growth == "RIGHT" then dx = off
-            elseif cfg.growth == "LEFT" then dx = -off
-            elseif cfg.growth == "UP" then dy = off
-            else dy = -off end
+            local dx, dy = A.SlotOffset(i, cfg.size, cfg.spacing, cfg.lineSpacing, cfg.perRow,
+                cfg.growth, cfg.point)
             ic:SetPoint(cfg.point, b, cfg.point, ax + dx + (cfg.x or 0), ay + dy + (cfg.y or 0))
         end
         for i = cfg.max + 1, #pool do pool[i]:Hide() end
@@ -1127,6 +1123,21 @@ end
 
 A.MakeIcon = makeIcon
 A.ApplyAura = apply
+-- Offset of the i-th icon of a row from the first. Horizontal rows wrap after perRow icons, new
+-- lines grow away from the anchored edge; vertical rows are one column.
+function A.SlotOffset(i, size, spacing, lineSpacing, perRow, growth, point)
+    local idx = i - 1
+    if growth == "UP" then return 0, idx * (size + spacing) end
+    if growth == "DOWN" then return 0, -idx * (size + spacing) end
+    local per = math.max(1, math.floor(perRow or 99))
+    local col, line = idx % per, math.floor(idx / per)
+    local dx = col * (size + spacing)
+    if growth == "LEFT" then dx = -dx end
+    local dy = line * (size + (lineSpacing or spacing))
+    if not (point and point:find("BOTTOM")) then dy = -dy end
+    return dx, dy
+end
+
 A.EdgeSign = edgeSign
 
 -- Feeds a status bar from an aura's timing: the remaining-time direction when

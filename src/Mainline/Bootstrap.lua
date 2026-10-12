@@ -79,7 +79,7 @@ local function start()
             text = N.L["FIRST_RUN_TEXT"],
             buttons = {
                 { text = "GitHub", onClick = function() N.Dialog.Link("GitHub", "https://github.com/NeeRgY/Nucleus") end },
-                { text = "Discord", onClick = function() N.Dialog.Link("Discord", "https://discord.gg/YjfyDKckCS") end },
+                { text = "Discord", onClick = function() N.Dialog.Link("Discord", "https://discord.gg/HTgSf7Bjy8") end },
                 { text = N.L["Got it"], primary = true },
             },
         })

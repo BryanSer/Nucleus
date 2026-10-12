@@ -6,8 +6,8 @@ local L = N.L
 local function uc(c) return c[1], c[2], c[3], c[4] or 1 end
 
 -- Supporters: a pane that slides out to the right of the options window (About tab)
--- and lists the people who support Nucleus, grouped by tier. The names live in
--- N.About.supporters (Core/About.lua); with none listed the pane says so.
+-- and lists the people who support Nucleus, grouped by tier, with the testers below. The names
+-- live in Core/About.lua.
 
 local S = {}
 N.Supporters = S
@@ -56,6 +56,11 @@ local function fill()
             y = addTier(child, y, tier)
             any = true
         end
+    end
+    local testers = N.About and N.About.testers
+    if testers and #testers > 0 then
+        y = addTier(child, y, { name = L["Testers"], color = { 0.45, 0.85, 0.55 }, names = testers })
+        any = true
     end
     if not any then
         local fs = N.FontString(child, 12)

@@ -985,11 +985,24 @@ local function forEachButton(fn)
 end
 UF.ForEachButton = forEachButton
 
+local relayoutPending
 function N.RefreshAllButtons()
     forEachButton(function(child)
         UF.LayoutBars(child)
         if child:IsShown() then fullUpdate(child) end
     end)
+    -- A size change reaches the bars one frame later, so the overlay bar widths (read from the
+    -- health bar in LayoutBars) are measured again once the new size has settled.
+    if not relayoutPending then
+        relayoutPending = true
+        C_Timer.After(0, function()
+            relayoutPending = false
+            forEachButton(function(child)
+                UF.LayoutBars(child)
+                if child:IsShown() then render(child) end
+            end)
+        end)
+    end
 end
 
 N:On("NUCLEUS_SETTING_CHANGED", function(_, section, path)

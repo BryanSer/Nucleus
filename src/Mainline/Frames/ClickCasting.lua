@@ -13,6 +13,28 @@ N.ClickCasting = CC
 
 local BUTTON_INDEX = { LeftButton = 1, RightButton = 2, MiddleButton = 3, Button4 = 4, Button5 = 5 }
 
+-- The wheel and the keyboard have no button number: while the mouse is over a frame, an override
+-- binding turns the wheel or key (with its modifiers) into a click named e.g. "ctrlSCROLLUP" or
+-- "altQ", and the attributes are keyed by that name ("type-altQ"). The modifier is part of the
+-- name, not of the attribute prefix. A key binding is stored as button = "KEY:Q".
+local WHEEL = { ScrollUp = "SCROLLUP", ScrollDown = "SCROLLDOWN" }
+local WHEEL_KEY = { ScrollUp = "MOUSEWHEELUP", ScrollDown = "MOUSEWHEELDOWN" }
+
+local function mouseIndex(button)
+    local idx = BUTTON_INDEX[button]
+    if idx then return idx end
+    local n = tonumber(tostring(button):match("^Button(%d+)$"))
+    if n and n >= 1 and n <= 31 then return n end
+end
+
+local function keyOf(button)
+    return type(button) == "string" and button:match("^KEY:(.+)$") or nil
+end
+
+local function hoverName(button)
+    return WHEEL[button] or keyOf(button)
+end
+
 -- Modifier combos are stored in Blizzard's attribute order, "alt-", then "ctrl-", then "shift-",
 -- because SecureButton_GetModifierPrefix builds the prefix in exactly that order; a binding
 -- written "shift-ctrl-" would never match. Older saves used other orders, so everything goes
@@ -37,6 +59,11 @@ local function modPrefix(mod)
     return mod == "none" and "" or (mod .. "-")
 end
 
+local function wheelSuffix(mod, button)
+    mod = CC.NormalizeModifier(mod)
+    return "-" .. (mod == "none" and "" or (mod:gsub("-", ""))) .. hoverName(button)
+end
+
 function CC.CurrentModifier()
     local out = {}
     if IsAltKeyDown() then out[#out + 1] = "alt" end
@@ -57,9 +84,18 @@ function CC.BindingText(binding)
     local names = {
         LeftButton = L["Left Click"], RightButton = L["Right Click"],
         MiddleButton = L["Middle Click"], Button4 = L["Mouse Button 4"],
-        Button5 = L["Mouse Button 5"],
+        Button5 = L["Mouse Button 5"], ScrollUp = L["Scroll Up"], ScrollDown = L["Scroll Down"],
     }
-    parts[#parts + 1] = names[binding and binding.button or "LeftButton"] or L["Left Click"]
+    local button = binding and binding.button or "LeftButton"
+    local key = keyOf(button)
+    local text = names[button]
+    if key then
+        text = _G["KEY_" .. key] or key
+    elseif not text then
+        local n = mouseIndex(button)
+        text = n and (L["Mouse Button 4"]:gsub("4", tostring(n))) or L["Left Click"]
+    end
+    parts[#parts + 1] = text
     return table.concat(parts, " + ")
 end
 
@@ -71,9 +107,13 @@ local PLAIN_ACTIONS = { target = "target", focus = "focus", menu = "togglemenu",
 
 local function attrPairs(binding)
     if not binding or binding.kind == "none" then return nil end
-    local idx = BUTTON_INDEX[binding.button]
+    local idx, prefix
+    if hoverName(binding.button) then
+        idx, prefix = wheelSuffix(binding.modifier, binding.button), ""
+    else
+        idx, prefix = mouseIndex(binding.button), modPrefix(binding.modifier)
+    end
     if not idx then return nil end
-    local prefix = modPrefix(binding.modifier)
     local typeAttr = prefix .. "type" .. idx
 
     -- "general" keeps the action in value; the bare kinds are what an earlier build of the options
@@ -90,6 +130,11 @@ local function attrPairs(binding)
         local v = binding.value
         if v:match("^[/#]") then
             return typeAttr, "macro", prefix .. "macrotext" .. idx, v
+        end
+        -- A picked macro runs as its own text; a lookup by name does not always fire.
+        local ok, body = pcall(GetMacroBody, v)
+        if ok and type(body) == "string" and body ~= "" then
+            return typeAttr, "macro", prefix .. "macrotext" .. idx, body
         end
         return typeAttr, "macro", prefix .. "macro" .. idx, v
     end
@@ -117,6 +162,7 @@ end
 local function isGated(typeAttr, action)
     if action == "togglemenu" then return true end
     if action ~= "target" then return false end
+    if typeAttr:find("^type%-") then return true end
     local mod, num = typeAttr:match("^(.-)type(%d+)$")
     return mod and (mod ~= "" or tonumber(num) ~= 1) or false
 end
@@ -138,7 +184,21 @@ end
 
 -- Clears every click-cast attribute slot before reapplying, so a removed or retyped binding stops
 -- firing.
+local appliedSlots = setmetatable({}, { __mode = "k" })
+local SLOT_ATTRS = { "clickbutton", "type", "spell", "item", "macro", "macrotext" }
+
 function CC.ClearAll(button)
+    local slots = appliedSlots[button]
+    if slots then
+        for _, slot in ipairs(slots) do
+            local prefix, idx = slot[1], slot[2]
+            for _, a in ipairs(SLOT_ATTRS) do
+                button:SetAttribute(prefix .. a .. idx, nil)
+            end
+            if proxyOf[button] then proxyOf[button]:SetAttribute(prefix .. "type" .. idx, nil) end
+        end
+        appliedSlots[button] = nil
+    end
     for _, mod in ipairs(ALL_MODS) do
         local prefix = modPrefix(mod)
         for _, idx in pairs(BUTTON_INDEX) do
@@ -151,13 +211,63 @@ function CC.ClearAll(button)
             button:SetAttribute(prefix .. "macrotext" .. idx, nil)
         end
     end
+    for _, mod in ipairs(ALL_MODS) do
+        for name in pairs(WHEEL) do
+            local idx = wheelSuffix(mod, name)
+            button:SetAttribute("clickbutton" .. idx, nil)
+            if proxyOf[button] then proxyOf[button]:SetAttribute("type" .. idx, nil) end
+            button:SetAttribute("type" .. idx, nil)
+            button:SetAttribute("spell" .. idx, nil)
+            button:SetAttribute("item" .. idx, nil)
+            button:SetAttribute("macro" .. idx, nil)
+            button:SetAttribute("macrotext" .. idx, nil)
+        end
+    end
+end
+
+-- Wheel bindings need the mouse-over override binding. One secure handler owns it; the wrapped
+-- OnEnter/OnLeave/OnHide of each frame set and clear it, so it also works in combat.
+local wheelHandler = CreateFrame("Frame", "NucleusWheelHandler", UIParent, "SecureHandlerBaseTemplate")
+local wheelWrapped = setmetatable({}, { __mode = "k" })
+
+local function wheelSnippet(bindings)
+    local lines, seen = { "local btn = ..." }, {}
+    for _, binding in ipairs(bindings or {}) do
+        local key = WHEEL_KEY[binding.button] or keyOf(binding.button)
+        if key and binding.kind ~= "none" and attrPairs(binding) then
+            local mod = CC.NormalizeModifier(binding.modifier)
+            local name = (mod == "none" and "" or (mod:gsub("-", ""))) .. hoverName(binding.button)
+            if not seen[name] then
+                seen[name] = true
+                local full = (mod == "none" and "" or (mod:upper() .. "-")) .. key
+                lines[#lines + 1] = ("self:SetBindingClick(true, %q, btn, %q)"):format(full, name)
+            end
+        end
+    end
+    return #lines > 1 and table.concat(lines, "\n") or ""
+end
+
+local function wrapWheel(button)
+    if wheelWrapped[button] or not button:GetName() then return end -- the click target is found by name
+    wheelWrapped[button] = true
+    pcall(function()
+        SecureHandlerWrapScript(button, "OnEnter", wheelHandler, [=[
+            owner:ClearBindings()
+            local snippet = owner:GetAttribute("wheelsnippet")
+            if snippet and snippet ~= "" then owner:Run(snippet, self:GetName()) end
+        ]=])
+        SecureHandlerWrapScript(button, "OnLeave", wheelHandler, [=[ owner:ClearBindings() ]=])
+        SecureHandlerWrapScript(button, "OnHide", wheelHandler, [=[ owner:ClearBindings() ]=])
+    end)
 end
 
 function CC.Apply(button, bindings)
     local menuOnRight = false
+    local slots = {}
     for _, binding in ipairs(bindings or {}) do
         local ta, tv, va, vv = attrPairs(binding)
         if ta then
+            slots[#slots + 1] = { ta:match("^(.-)type"), ta:match("type(.*)$") }
             if va then
                 button:SetAttribute(ta, tv)
                 button:SetAttribute(va, vv)
@@ -167,6 +277,7 @@ function CC.Apply(button, bindings)
             if ta == "type2" then menuOnRight = true end
         end
     end
+    appliedSlots[button] = slots
     -- A plain right click without a binding falls back to the header's togglemenu wildcard, which
     -- the gate blocks the same way, so route it through the proxy too.
     if not menuOnRight then setPlainAction(button, "type2", "togglemenu") end
@@ -203,12 +314,16 @@ end
 function CC.ApplyToAll()
     if not N.db or not N.UnitFrame then return end
     N.RunWhenSafe(function()
+        local bindings = N.db.clickCasting and N.db.clickCasting.bindings
+        local snippet = wheelSnippet(bindings)
+        wheelHandler:SetAttribute("wheelsnippet", snippet)
         N.UnitFrame.ForEachButton(function(b)
             local child = b._secure or b -- bindings live on the secure button
             CC.ClearAll(child)
             child:SetAttribute("*type1", "target")
             child:SetAttribute("*type2", "togglemenu")
-            CC.Apply(child, N.db.clickCasting and N.db.clickCasting.bindings)
+            CC.Apply(child, bindings)
+            if snippet ~= "" then wrapWheel(child) end
         end)
     end, "clickcasting-apply")
 end
@@ -218,6 +333,19 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, section)
         CC.SelectClass() -- the list in use may have changed (a specialization got its own)
         CC.ApplyToAll()
     end
+end)
+
+-- Bound macros run the text they had when applied: re-apply when a macro is edited.
+local macroWatcher = CreateFrame("Frame")
+macroWatcher:RegisterEvent("UPDATE_MACROS")
+local macroPending
+macroWatcher:SetScript("OnEvent", function()
+    if macroPending then return end
+    macroPending = true
+    C_Timer.After(1, function()
+        macroPending = false
+        CC.ApplyToAll()
+    end)
 end)
 
 local specWatcher = CreateFrame("Frame")

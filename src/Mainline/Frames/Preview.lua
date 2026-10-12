@@ -11,13 +11,11 @@ local UF = N.UnitFrame
 -- honored by UnitFrame.render / Indicators / Auras) unless General > Preview Settings > "Show all
 -- enabled indicators" is on.
 --
--- The mock frame has a FIXED size, not the configured frame size, so every indicator's preview
--- lines up the same.
 
 local P = {}
 N.Preview = P
 
-local FIXED_W, FIXED_H = 180, 90
+local MIN_W = 150
 local PAD = 12
 local TITLE_H = 20
 
@@ -88,7 +86,8 @@ local healthTicker
 local function freshMock(filter, stateKey)
     local now = GetTime()
     local m = {
-        name = (UnitName and UnitName("player")) or L["Preview"], class = "PRIEST",
+        name = (UnitName and UnitName("player")) or L["Preview"],
+        class = (select(2, UnitClass("player"))) or "PRIEST",
         hpMax = 100, hp = 100, ppMax = 100, pp = 45, ppType = 0,
         connected = true, dead = false, aggro = false,
         role = "HEALER", isLeader = true, isTarget = false,
@@ -153,11 +152,17 @@ local function freshMock(filter, stateKey)
     return m
 end
 
--- Builds a small fixed-size preview card masked to `subId` (unless "show all enabled" is on) and
--- returns the sized host frame, ready for p:AddCard(host) above that indicator's settings.
+local function frameSize()
+    local cfg = N.db and N.db[N:Mode()]
+    return (cfg and cfg.width) or 120, (cfg and cfg.height) or 50
+end
+
+-- Builds a preview card masked to `subId` (unless "show all enabled" is on) and returns the
+-- sized host frame, ready for p:AddCard(host) above that indicator's settings.
 function P.Create(parent, subId, customId)
+    local fw, fh = frameSize()
     local host = CreateFrame("Frame", nil, parent)
-    host:SetSize(FIXED_W + PAD * 4, TITLE_H + FIXED_H + PAD * 2)
+    host:SetSize(math.max(fw, MIN_W) + PAD * 4, TITLE_H + fh + PAD * 2)
     N.SkinPanel(host, M.color.frameBg)
     host._nucFrameText = true -- the mock frames inside show the frame font, not the window font
 
@@ -185,7 +190,7 @@ function P.Create(parent, subId, customId)
     end)
 
     local button = CreateFrame("Button", nil, host)
-    button:SetSize(FIXED_W, FIXED_H)
+    button:SetSize(fw, fh)
     button:SetPoint("TOP", 0, -(TITLE_H + PAD / 2))
     UF.CreateVisual(button, N:Mode())
 
@@ -216,6 +221,11 @@ function P.Create(parent, subId, customId)
         local key = N:Mode()
         local ps = N.db.previewSettings or {}
         button.groupKey = key
+        local w, h = frameSize()
+        if button:GetWidth() ~= w or button:GetHeight() ~= h then
+            button:SetSize(w, h)
+            host:SetHeight(TITLE_H + h + PAD * 2)
+        end
         button._previewOnly = (not ps.showAllEnabled) and subId or nil
         button._previewCustom = (not ps.showAllEnabled) and customId or nil
         UF.LayoutBars(button)

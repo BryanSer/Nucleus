@@ -13,13 +13,16 @@
 ## Notes-zhTW: 現代化的團隊和隊伍框架。
 ## Author: NeRgY
 ## IconTexture: Interface\AddOns\Nucleus\Media\Textures\Logo
-## Version: 1.0.0
+## Version: 1.0.1
 ## SavedVariables: NucleusDB_Forever
 ## X-Category: Unit Frames
 ## X-License: All Rights Reserved
 ## X-Client: Forever (Camelot)
 
 Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
 Libs\LibDeflate\LibDeflate.lua
 Libs\LibSerialize\LibSerialize.lua
 

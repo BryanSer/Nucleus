@@ -8,6 +8,24 @@ local N = ns.N
 local HG = {}
 N.HeaderGroup = HG
 
+-- The position of a group header lives on a plain frame the header is anchored to. Moving the
+-- header itself is forbidden in combat (it is protected); moving this frame is not.
+local posFrames = {}
+function N.HeaderPosFrame(key) return posFrames[key] end
+local function placeHeader(header, key, cfg)
+    local pf = posFrames[key]
+    if not pf then
+        pf = CreateFrame("Frame", nil, UIParent)
+        pf:SetSize(1, 1)
+        pf:SetMovable(true)
+        posFrames[key] = pf
+    end
+    pf:ClearAllPoints()
+    pf:SetPoint(cfg.point, UIParent, cfg.point, cfg.x, cfg.y)
+    header:ClearAllPoints()
+    header:SetPoint(cfg.point, pf, cfg.point, 0, 0)
+end
+
 -- Blizzard's group headers are secure frames: nothing of ours is stored in their Lua tables.
 local headerInfo = setmetatable({}, { __mode = "k" })
 function N.HeaderKey(frame)
@@ -192,6 +210,7 @@ local function raidGroupAllowed(group)
     local gf = raid and raid.groupFilter
     return not (type(gf) == "table" and gf[group] == false)
 end
+N.RaidGroupAllowed = raidGroupAllowed
 
 -- Role order without pinned names needs no name list: the header sorts by assigned role itself
 -- (groupBy ASSIGNEDROLE), which also follows role changes on its own. Returns the grouping order
@@ -516,13 +535,13 @@ local function configure(header)
         end
     end
 
-    header:ClearAllPoints()
-    header:SetPoint(cfg.point, UIParent, cfg.point, cfg.x, cfg.y)
+    placeHeader(header, key, cfg)
 
+    -- Size first: the header update sizes itself from its children.
+    applyChildSize(header)
     if SecureGroupHeader_Update then
         SecureGroupHeader_Update(header)
     end
-    applyChildSize(header)
     styleChildren(header)
     -- Child creation can lag a frame behind the attribute write.
     C_Timer.After(0, function() styleChildren(header) end)

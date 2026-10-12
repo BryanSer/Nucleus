@@ -673,7 +673,7 @@ local function layoutOf(spec)
     end
     if spec.shape == "border" or spec.shape == "overlay" or spec.shape == "text" or spec.shape == "glow" then w, h = 0.001, 0.001 end
     local sp = spec.spacing or 1
-    return { elementWidth = w, elementHeight = h, elementSpacing = sp, lineSpacing = sp }, w, h
+    return { elementWidth = w, elementHeight = h, elementSpacing = sp, lineSpacing = spec.lineSpacing or sp }, w, h
 end
 
 local function groupOpts(h, group)
@@ -700,35 +700,46 @@ local function anchor(h)
     local point = spec.point or "CENTER"
     local ax, ay = 0, 0
     if spec.shape ~= "border" and spec.shape ~= "overlay" and spec.shape ~= "glow" then ax, ay = edgeSign(point) end
-    -- The game's flow puts the first button's near edge at the container's anchor, so on a point
-    -- with no left/right part (top, center, bottom) the row would start half an icon right of the
-    -- middle. Pull it back so the first icon sits centered.
-    local shape = spec.shape
-    if (shape == "icon" or shape == "rect" or shape == "bar" or shape == "dispel")
-        and not (point:find("LEFT") or point:find("RIGHT")) then
-        local _, w0 = layoutOf(spec)
-        ax = ax + ((spec.growth == "LEFT") and w0 / 2 or -w0 / 2)
-    end
     if point:find("BOTTOM") and N.PowerInset and spec.shape ~= "border" and spec.shape ~= "overlay"
         and spec.shape ~= "glow" then
         ay = ay + N.PowerInset(b)
     end
+    local _, w, hgt = layoutOf(spec)
+    local growth = spec.growth or "RIGHT"
+    local sp = spec.spacing or 1
+    local flowPoint = point
     c:ClearAllPoints()
-    c:SetPoint(point, b, point, ax + (spec.x or 0), ay + (spec.y or 0))
+    local shape = spec.shape
+    -- A horizontal row that wraps (perRow < max) stacks its lines away from the anchored edge.
+    local perRow = spec.perRow and math.max(1, math.min(spec.perRow, spec.max or 1)) or nil
+    local wraps = perRow and perRow < (spec.max or 1) and (growth == "LEFT" or growth == "RIGHT")
+    local linesUp = growth == "UP" or (wraps and point:find("BOTTOM") ~= nil)
+    if shape == "icon" or shape == "rect" or shape == "bar" or shape == "dispel" then
+        -- The first element sits with the chosen point on that point of the frame, the others
+        -- grow from it; the container is placed by the corner the flow starts in.
+        flowPoint = (linesUp and "BOTTOM" or "TOP") .. ((growth == "LEFT") and "RIGHT" or "LEFT")
+        local px = point:find("LEFT") and 0 or point:find("RIGHT") and w or w / 2
+        local py = point:find("TOP") and 0 or point:find("BOTTOM") and hgt or hgt / 2
+        local tx = ax + (spec.x or 0) - px
+        local ty = ay + (spec.y or 0) + py
+        if flowPoint:find("RIGHT") then tx = tx + w end
+        if flowPoint:find("BOTTOM") then ty = ty - hgt end
+        c:SetPoint(flowPoint, b, point, tx, ty)
+    else
+        c:SetPoint(point, b, point, ax + (spec.x or 0), ay + (spec.y or 0))
+    end
     c:SetSize(1, 1)
 
-    local _, w, hgt = layoutOf(spec)
-    local sp = spec.spacing or 1
     local FD = AnchorUtil and AnchorUtil.FlowDirection
-    local growth = spec.growth or "RIGHT"
-    if c.SetFlowLayoutAnchorPoint then pcall(c.SetFlowLayoutAnchorPoint, c, point) end
+    if c.SetFlowLayoutAnchorPoint then pcall(c.SetFlowLayoutAnchorPoint, c, flowPoint) end
     if FD and c.SetFlowLayoutGrowthDirection then
         local hd, vd = FD.Right, FD.Down
-        if growth == "LEFT" then hd = FD.Left elseif growth == "UP" then vd = FD.Up end
+        if growth == "LEFT" then hd = FD.Left end
+        if linesUp then vd = FD.Up end
         pcall(c.SetFlowLayoutGrowthDirection, c, hd, vd)
     end
     if c.SetFlowLayoutMaximumLineSize then
-        local n = spec.max or 1
+        local n = wraps and perRow or spec.max or 1
         local line = n * w + math.max(n - 1, 0) * math.abs(sp) + 0.4
         if growth == "UP" or growth == "DOWN" then line = hgt + 0.4 end
         pcall(c.SetFlowLayoutMaximumLineSize, c, line)
@@ -764,6 +775,10 @@ local function park(h)
         c:SetAlpha(0)
         c:SetSize(1, 1)
     end)
+    -- A parked container's buttons are not initialised again on return: keep their list with it.
+    h.parkedButtons = h.parkedButtons or setmetatable({}, { __mode = "k" })
+    h.parkedButtons[c] = h.buttons
+    h.buttons = setmetatable({}, { __mode = "k" })
     h.container = nil
     h.boundUnit = nil
 end
@@ -820,7 +835,7 @@ local function build(h)
         pcall(function() c:SetAlpha(1); c:SetParent(h.parent) end)
         h.container = c
         h.sig = sig
-        for k in pairs(h.buttons) do h.buttons[k] = nil end
+        h.buttons = (h.parkedButtons and h.parkedButtons[c]) or h.buttons
         tuneGroups(h)
         c:Show()
         bindUnit(h)

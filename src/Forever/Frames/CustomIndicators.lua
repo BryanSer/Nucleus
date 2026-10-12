@@ -39,7 +39,7 @@ function CI.NewEntry(kind, name)
         id = newID(), name = name, type = kind, enabled = true,
         aura = "buff", mine = true, spells = "",
         point = "TOPRIGHT", x = 0, y = 0, color = { 1.00, 0.80, 0.20 },
-        size = 16, max = 3, spacing = 1, growth = "LEFT",
+        size = 16, max = 3, spacing = 1, perRow = 8, lineSpacing = 1, growth = "LEFT",
         showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = false,
         timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1,
         textKind = "fixed", text = "{stacks}", fontSize = 12,
@@ -155,10 +155,7 @@ builders.icon = function(b)
             local ic = w.icons[i]
             if not ic then ic = A.MakeIcon(b.overlay); w.icons[i] = ic end
             ic:SetSize(size, size)
-            local off = (i - 1) * (size + sp)
-            local dx, dy = 0, 0
-            if e.growth == "RIGHT" then dx = off elseif e.growth == "UP" then dy = off
-            elseif e.growth == "DOWN" then dy = -off else dx = -off end
+            local dx, dy = A.SlotOffset(i, size, sp, e.lineSpacing, e.perRow, e.growth or "LEFT", e.point)
             anchorOf(b, e, ic, dx, dy)
             A.ApplyAura(ic, d, e, ROW, b.unit)
         end
@@ -289,7 +286,7 @@ end
 -- color ------------------------------------------------------------------------
 -- A colored area: one color, the unit's class color, or a gradient of two.
 -- Returns mode ("solid" | "gradient-v" | "gradient-h"), first color, second color.
-function CI.ResolveColor(e, unit)
+function CI.ResolveColor(e, unit, classToken)
     local mode = e.colorMode or "solid"
     local c1 = e.color or { 1, 1, 1 }
     local c2 = e.color2 or c1
@@ -298,6 +295,8 @@ function CI.ResolveColor(e, unit)
         if unit and UnitExists(unit) then
             local _, token = UnitClass(unit)
             if token and not IsSecret(token) then r, g, bl = N.ClassRGB(token) end
+        elseif classToken then
+            r, g, bl = N.ClassRGB(classToken)
         end
         return "solid", { r, g, bl }, { r, g, bl }
     end
@@ -356,7 +355,7 @@ builders.color = function(b)
             w.frame:SetAllPoints(b)
             CI.AnchorArea(w.tex, b, e.colorArea)
         end
-        local mode, c1, c2 = CI.ResolveColor(e, b.unit)
+        local mode, c1, c2 = CI.ResolveColor(e, b.unit, b._mock and b.class)
         CI.PaintFill(w.tex, mode, c1, c2)
         w.tex:SetAlpha(e.opacity or 1)
         w.frame:Show()
@@ -425,7 +424,7 @@ builders.overlay = function(b)
     w.tex:SetTexture(M.flat)
     function w.show(e)
         CI.AnchorArea(w.tex, b, e.colorArea or "health")
-        local mode, c1, c2 = CI.ResolveColor(e, b.unit)
+        local mode, c1, c2 = CI.ResolveColor(e, b.unit, b._mock and b.class)
         CI.PaintFill(w.tex, mode, c1, c2)
         w.tex:SetAlpha(e.opacity or 0.35)
         w.tex:Show()
@@ -514,6 +513,7 @@ local function engineSpec(b, e)
     local max = (e.type == "icons") and (e.max or 3) or 1
     local spec = {
         shape = shape, point = e.point, x = e.x, y = e.y, growth = e.growth, spacing = e.spacing,
+        perRow = e.perRow, lineSpacing = e.lineSpacing,
         size = e.size, max = max, width = e.width, height = e.height, color = e.color,
         thickness = e.thickness, opacity = e.opacity, around = e.around, fill = e.fill,
         cd = e.showCooldown and (e.cdStyle or "spiral") or "none",
@@ -526,7 +526,7 @@ local function engineSpec(b, e)
         groups = { { key = "ci", filter = filter, candidate = { includeSpellIDs = set }, max = max } },
     }
     if e.type == "color" or e.type == "overlay" then
-        local mode, c1, c2 = CI.ResolveColor(e, b.unit)
+        local mode, c1, c2 = CI.ResolveColor(e, b.unit, b._mock and b.class)
         spec.colorMode, spec.color, spec.color2 = mode, c1, c2
         spec.colorArea = e.colorArea or (e.type == "overlay" and "health" or "free")
         spec.opacity = e.opacity or (e.type == "overlay" and 0.35 or 1)

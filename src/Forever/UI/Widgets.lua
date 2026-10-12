@@ -601,17 +601,24 @@ local function getGrabber()
     dim:SetAllPoints()
     dim:SetColorTexture(0, 0, 0, 0.45)
 
+    local PLATE_W, PLATE_PAD = 460, 20
     local plate = CreateFrame("Frame", nil, grabber)
-    plate:SetSize(380, 64)
+    plate:SetWidth(PLATE_W)
     plate:SetPoint("CENTER")
     N.SkinRound(plate, M.color.card, M.color.accent)
     local hint = N.FontString(plate, 13)
-    hint:SetPoint("CENTER", 0, 8)
+    hint:SetPoint("TOP", 0, -PLATE_PAD)
+    hint:SetWidth(PLATE_W - 2 * PLATE_PAD)
+    hint:SetJustifyH("CENTER")
+    hint:SetWordWrap(true)
     hint:SetText(N.L["KEYCAPTURE_HINT"])
     local sub = N.FontString(plate, 11)
-    sub:SetPoint("CENTER", 0, -12)
+    sub:SetPoint("TOP", hint, "BOTTOM", 0, -10)
+    sub:SetWidth(PLATE_W - 2 * PLATE_PAD)
+    sub:SetJustifyH("CENTER")
     sub:SetTextColor(unpackColor(M.color.textDim))
     sub:SetText(N.L["KEYCAPTURE_ESC"])
+    plate:SetHeight(PLATE_PAD * 2 + hint:GetStringHeight() + 10 + sub:GetStringHeight())
 
     grabber:SetScript("OnClick", function(self, btn)
         local done = self.onDone
@@ -619,6 +626,17 @@ local function getGrabber()
         self:Hide()
         if done then done(btn) end
     end)
+    grabber:EnableMouseWheel(true)
+    grabber:SetScript("OnMouseWheel", function(self, delta)
+        local done = self.onDone
+        self.onDone, self.onCancel = nil, nil
+        self:Hide()
+        if done then done(delta > 0 and "ScrollUp" or "ScrollDown") end
+    end)
+    local MODIFIER_KEYS = {
+        LSHIFT = true, RSHIFT = true, LCTRL = true, RCTRL = true, LALT = true, RALT = true,
+        LMETA = true, RMETA = true,
+    }
     grabber:SetScript("OnKeyDown", function(self, key)
         if key == "ESCAPE" then
             self:SetPropagateKeyboardInput(false)
@@ -626,8 +644,15 @@ local function getGrabber()
             self.onDone, self.onCancel = nil, nil
             self:Hide()
             if cancel then cancel() end
+        elseif MODIFIER_KEYS[key] or key:find("^BUTTON") then
+            -- a modifier is held for the combo; mouse buttons arrive through OnClick
+            self:SetPropagateKeyboardInput(false)
         else
-            self:SetPropagateKeyboardInput(true)
+            self:SetPropagateKeyboardInput(false)
+            local done = self.onDone
+            self.onDone, self.onCancel = nil, nil
+            self:Hide()
+            if done then done("KEY:" .. key) end
         end
     end)
     return grabber

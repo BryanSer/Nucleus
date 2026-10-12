@@ -17,10 +17,11 @@ N.About = {
         { name = "Supporter", color = { 0.42, 0.70, 1.00 },
           names = { "Longhorn", "Milkerson", "Kieran Smith", "Zozo" } },
     },
+    testers = { "McPeanut", "B3Rti", "Omfgdan", "Graza", "sushibarf", "Nadjell" },
     links = {
         {
             label = "Discord",
-            url   = "https://discord.gg/YjfyDKckCS",
+            url   = "https://discord.gg/HTgSf7Bjy8",
             color = { 0.345, 0.396, 0.949 },
             icon  = MEDIA .. "discord.png",
         },

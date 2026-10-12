@@ -516,9 +516,16 @@ local function convertBinding(entry)
     if type(key) ~= "string" then return nil end
     local mods, idx = key:match("^(.-)%-?type(%d)$")
     idx = tonumber(idx)
-    if not (idx and BUTTONS[idx]) then return nil end
-    local mod = (mods and mods ~= "") and mods or "none"
-    local b = { modifier = mod, button = BUTTONS[idx] }
+    local button = idx and (BUTTONS[idx] or (idx >= 6 and idx <= 31 and ("Button" .. idx)) or nil)
+    if not button then
+        local wm, dir = key:match("^(.-)%-?type%-SCROLL(%u+)$")
+        if wm and (dir == "UP" or dir == "DOWN") then
+            mods, button = wm, (dir == "UP") and "ScrollUp" or "ScrollDown"
+        end
+    end
+    if not button then return nil end
+    local mod = (mods and mods ~= "") and mods:gsub("%-$", "") or "none"
+    local b = { modifier = mod, button = button }
     if PLAIN[action] then
         b.kind, b.value = "general", PLAIN[action]
     elseif action == "spell" and num(value) then
