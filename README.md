@@ -61,7 +61,7 @@ https://github.com/NeeRgY/Cell
 
 | Client                 | TOC                    | SavedVariables        | State        |
 |------------------------|------------------------|-----------------------|--------------|
-| Retail (Midnight 12.1) | `Nucleus_Mainline.toc` | `NucleusDB_Mainline`  | Early        |
+| Retail                 | `Nucleus_Mainline.toc` | `NucleusDB_Mainline`  | Early        |
 | WoW Forever (Classic)  | `Nucleus_Camelot.toc`  | `NucleusDB_Forever`   | Early        |
 | Vanilla                | `Nucleus_Vanilla.toc`  | `NucleusDB_Vanilla`   | Early        |
 | TBC                    | `Nucleus_TBC.toc`      | `NucleusDB_TBC`       | Early        |
