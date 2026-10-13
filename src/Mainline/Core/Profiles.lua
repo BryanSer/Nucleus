@@ -1,23 +1,10 @@
 local _, ns = ...
 local N = ns.N
 
--- Profiles
---
--- A profile is a full set of frame settings: party and raid frames (layout, appearance,
--- indicators, auras), tooltip, ping, click-casting and targeted spell bars. Everything else
--- (language, window scale, highlight color, minimap button, lock state, ...) is account-wide.
---
--- N.db is a thin proxy: reading or writing a profile key (N.db.party, N.db.clickCasting, ...) goes
--- to the ACTIVE profile's table, anything else to the SavedVariables root. A profile switch only
--- swaps the table the proxy points at and replays a few settings events so each module re-applies
--- itself.
---
--- SavedVariables layout (NucleusDB_Mainline):
---   <global keys>   language, uiScale, accentColor, minimap, ...
---   currentProfile  name of the active profile
---   profiles[name]  { party=, raid=, tooltip=, core=, ping=, clickCasting=, targetedSpellBars= }
---   autoSwitch      { enabled, role[ROLE][situation], spec[specID][situation] }
---   backups[i]      { time, name, data } newest first, capped
+-- Profiles: a profile holds the frame settings (party, raid, pets, spotlight, tooltip, click-casting, actions,
+-- tools, ...); language, scale, highlight color and the lock state are account-wide. N.db is a proxy: profile
+-- keys go to the active profile (or the shared copy, see scope below), the rest to the SavedVariables root.
+-- A switch swaps the table and replays settings events.
 
 local P = {}
 N.Profiles = P
@@ -29,6 +16,18 @@ P.KEYS = { "party", "raid", "tooltip", "core", "ping", "clickCasting", "targeted
 local KEYSET = {}
 for _, k in ipairs(P.KEYS) do KEYSET[k] = true end
 P.KEYSET = KEYSET
+
+-- Areas that can be shared by every profile instead of stored in each, with their profile keys.
+P.SCOPE_AREAS = {
+    { id = "tooltip",      keys = { "tooltip" } },
+    { id = "clickCasting", keys = { "clickCasting" } },
+    { id = "utilities",    keys = { "tools", "actions" } },
+    { id = "spotlight",    keys = { "spotlight" } },
+}
+local SCOPE_OF = {} -- profile key -> area id
+for _, a in ipairs(P.SCOPE_AREAS) do
+    for _, k in ipairs(a.keys) do SCOPE_OF[k] = a.id end
+end
 
 local DEFAULT_NAME = "Default"
 local HIDE = "__hide" -- auto-switch target: hide the frames
@@ -44,6 +43,7 @@ P.SITUATIONS = {
     { key = "raid_instance",  label = "Raid (Instance)" },
     { key = "raid_mythic",    label = "Raid (Mythic)" },
     { key = "arena",          label = "Arena" },
+    { key = "battleground10", label = "Battleground (10)" },
     { key = "battleground15", label = "Battleground (15)" },
     { key = "battleground40", label = "Battleground (40)" },
 }
@@ -53,9 +53,7 @@ local active   -- the active profile's table
 local activeName
 local profileDefaults
 
---------------------------------------------------------------------------------
 -- setup (called once from Database.InitDB)
---------------------------------------------------------------------------------
 
 local function buildDefaults()
     profileDefaults = {}
@@ -88,12 +86,12 @@ function P.Setup(saved)
         if not KEYSET[k] then globalDef[k] = v end
     end
     local stash = { profiles = raw.profiles, backups = raw.backups, autoSwitch = raw.autoSwitch,
-                    currentProfile = raw.currentProfile }
-    raw.profiles, raw.backups, raw.autoSwitch, raw.currentProfile = nil, nil, nil, nil
+                    currentProfile = raw.currentProfile, sharedData = raw.sharedData }
+    raw.profiles, raw.backups, raw.autoSwitch, raw.currentProfile, raw.sharedData = nil, nil, nil, nil, nil
     N.PruneStale(raw, globalDef)
     N.MergeDefaults(raw, globalDef)
-    raw.profiles, raw.backups, raw.autoSwitch, raw.currentProfile =
-        stash.profiles, stash.backups, stash.autoSwitch, stash.currentProfile
+    raw.profiles, raw.backups, raw.autoSwitch, raw.currentProfile, raw.sharedData =
+        stash.profiles, stash.backups, stash.autoSwitch, stash.currentProfile, stash.sharedData
 
     if type(raw.backups) ~= "table" then raw.backups = {} end
     if type(raw.autoSwitch) ~= "table" then raw.autoSwitch = {} end
@@ -123,20 +121,32 @@ function P.Setup(saved)
     active = raw.profiles[raw.currentProfile]
     activeName = raw.currentProfile
 
+    -- The shared copies of the areas that every profile uses together.
+    if type(raw.sharedData) ~= "table" then raw.sharedData = {} end
+    if type(raw.profileScope) ~= "table" then raw.profileScope = {} end
+    local sharedDefaults = {}
+    for k in pairs(SCOPE_OF) do sharedDefaults[k] = profileDefaults[k] end
+    N.PruneStale(raw.sharedData, sharedDefaults)
+    N.MergeDefaults(raw.sharedData, sharedDefaults)
+
+    -- The table a profile key lives in right now: the active profile, or the shared copy.
+    local function holder(k)
+        local area = SCOPE_OF[k]
+        if area and raw.profileScope[area] == "global" then return raw.sharedData end
+        return active
+    end
     N.db = setmetatable({}, {
         __index = function(_, k)
-            if KEYSET[k] then return active[k] end
+            if KEYSET[k] then return holder(k)[k] end
             return raw[k]
         end,
         __newindex = function(_, k, v)
-            if KEYSET[k] then active[k] = v else raw[k] = v end
+            if KEYSET[k] then holder(k)[k] = v else raw[k] = v end
         end,
     })
 end
 
---------------------------------------------------------------------------------
 -- registry
---------------------------------------------------------------------------------
 
 function P.List()
     local out = {}
@@ -166,12 +176,9 @@ function P.UniqueName(name)
     return name .. " (" .. i .. ")"
 end
 
---------------------------------------------------------------------------------
 -- switching
---------------------------------------------------------------------------------
 
--- Replays settings events so every module re-reads the active profile. Modules already react to
--- these for normal option changes; a switch is just everything changing at once.
+-- Replays settings events so every module re-reads the active profile.
 local function reapply()
     for _, sec in ipairs({ "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }) do
         N:Fire("NUCLEUS_SETTING_CHANGED", sec, sec .. ".enabled", N.db[sec].enabled)
@@ -189,8 +196,7 @@ local function reapply()
     N:Fire("NUCLEUS_SETTING_CHANGED", "tooltip", "tooltip.enabled")
 end
 
--- Makes name the active profile. Frame work is queued by the modules, so this is safe in combat;
--- the auto-switch below also waits for combat to end so a layout never changes mid-fight.
+-- Makes name the active profile; frame work is queued by the modules, so this is safe in combat.
 function P.Switch(name)
     if not raw.profiles[name] or name == activeName then return false end
     active = raw.profiles[name]
@@ -251,23 +257,60 @@ function P.Delete(name)
     return true
 end
 
---------------------------------------------------------------------------------
+-- scope: per profile or shared by every profile
+
+-- A profile's data for export / backup, with shared areas taken from the shared copy.
+local function profileData(name)
+    local prof = N.DeepCopy(raw.profiles[name])
+    for k, area in pairs(SCOPE_OF) do
+        if raw.profileScope and raw.profileScope[area] == "global" and raw.sharedData[k] then
+            prof[k] = N.DeepCopy(raw.sharedData[k])
+        end
+    end
+    return prof
+end
+
+function P.GetScope(area)
+    local s = raw.profileScope
+    return (s and s[area] == "global") and "global" or "profile"
+end
+
+-- "global": the active profile's settings become the shared ones; back: every profile gets a copy.
+function P.SetScope(area, scope)
+    local def
+    for _, a in ipairs(P.SCOPE_AREAS) do
+        if a.id == area then def = a end
+    end
+    if not def then return end
+    scope = (scope == "global") and "global" or "profile"
+    if P.GetScope(area) == scope then return end
+    if scope == "global" then
+        for _, k in ipairs(def.keys) do raw.sharedData[k] = N.DeepCopy(active[k]) end
+    else
+        for _, prof in pairs(raw.profiles) do
+            for _, k in ipairs(def.keys) do prof[k] = N.DeepCopy(raw.sharedData[k]) end
+        end
+    end
+    raw.profileScope[area] = scope
+    reapply()
+    N:Fire("NUCLEUS_PROFILE_CHANGED", activeName)
+    N:Fire("NUCLEUS_PROFILES_CHANGED")
+end
+
 -- backups
---------------------------------------------------------------------------------
 
 function P.Backup(name, reason)
     local prof = raw.profiles[name]
     if not prof then return end
     table.insert(raw.backups, 1, {
         time = date("%Y-%m-%d %H:%M"), name = name, reason = reason,
-        data = N.DeepCopy(prof),
+        data = profileData(name),
     })
     while #raw.backups > MAX_BACKUPS do table.remove(raw.backups) end
     N:Fire("NUCLEUS_PROFILES_CHANGED")
 end
 
--- Writes a profile's data over name (creating it if needed) and re-applies it if it is the active
--- one.
+-- Writes data over a profile (creating it) and re-applies it when it is the active one.
 local function replaceProfile(name, data)
     raw.profiles[name] = normalizeProfile(N.DeepCopy(data))
     if name == activeName then
@@ -286,9 +329,7 @@ function P.RestoreBackup(index)
     return true, b.name
 end
 
---------------------------------------------------------------------------------
 -- export / import
---------------------------------------------------------------------------------
 
 function P.CanShare()
     return LibSerialize ~= nil and LibDeflate ~= nil
@@ -297,7 +338,7 @@ end
 function P.Export(name)
     local prof = raw.profiles[name]
     if not (prof and P.CanShare()) then return nil end
-    local data = { v = N.Defaults.dbVersion, name = name, profile = N.DeepCopy(prof) }
+    local data = { v = N.Defaults.dbVersion, name = name, profile = profileData(name) }
     local str = LibSerialize:Serialize(data)
     str = LibDeflate:CompressDeflate(str, { level = 9 })
     str = LibDeflate:EncodeForPrint(str)
@@ -331,8 +372,7 @@ function P.Decode(text)
     return true, { name = type(data.name) == "string" and data.name or "Imported", profile = clean }
 end
 
--- Imports decoded data as `name`. An existing profile of that name is backed up
--- first, then replaced. Returns the final name.
+-- Imports as `name` (an existing profile is backed up first); returns the final name.
 function P.Import(data, name)
     name = cleanName(name) or P.UniqueName(data.name)
     if raw.profiles[name] then P.Backup(name, "before import") end
@@ -340,15 +380,15 @@ function P.Import(data, name)
     return name
 end
 
---------------------------------------------------------------------------------
 -- auto switch
---------------------------------------------------------------------------------
 
 function P.GetSituation()
     local _, instanceType, difficultyID, _, maxPlayers = GetInstanceInfo()
     if instanceType == "arena" then return "arena" end
     if instanceType == "pvp" then
-        return ((maxPlayers or 0) >= 30) and "battleground40" or "battleground15"
+        maxPlayers = maxPlayers or 0
+        if maxPlayers >= 30 then return "battleground40" end
+        return (maxPlayers > 0 and maxPlayers <= 10) and "battleground10" or "battleground15"
     end
     if not IsInGroup() then return "solo" end
     if not IsInRaid() then return "party" end
@@ -358,12 +398,22 @@ function P.GetSituation()
     return "raid_outdoor"
 end
 
--- specID, role, spec display name (nil when the client can't tell yet).
+-- Whether this client has specializations at all (Classic Era and TBC have none).
+function P.HasSpecs()
+    local spi = _G.C_SpecializationInfo
+    return ((spi and spi.GetSpecialization) or _G.GetSpecialization) ~= nil
+end
+
+-- specID, role, spec name (only the role on clients without specializations).
 function P.GetSpec()
     local spi = _G.C_SpecializationInfo
     local getSpec = (spi and spi.GetSpecialization) or _G.GetSpecialization
     local getInfo = (spi and spi.GetSpecializationInfo) or _G.GetSpecializationInfo
-    if not (getSpec and getInfo) then return nil end
+    if not (getSpec and getInfo) then
+        local role = _G.UnitGroupRolesAssigned and UnitGroupRolesAssigned("player")
+        if role == "TANK" or role == "HEALER" or role == "DAMAGER" then return nil, role, nil end
+        return nil
+    end
     local ok, index = pcall(getSpec)
     if not (ok and index) then return nil end
     local ok2, specID, specName, _, _, role = pcall(getInfo, index)
@@ -371,8 +421,7 @@ function P.GetSpec()
     return specID, role, specName
 end
 
--- The table the settings UI and switcher read: the per-spec one if the player opted in for this
--- spec, otherwise the per-role one. Returns table, "spec"|"role".
+-- The assignment table in use: per spec if opted in, otherwise per role. Returns table, "spec"|"role".
 function P.GetAssignmentTable()
     local specID, role = P.GetSpec()
     local a = raw.autoSwitch

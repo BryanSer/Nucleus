@@ -34,7 +34,7 @@ local AURA_ROWS = {
 }
 
 local state = { from = "party", to = "raid", sel = {} }
-local GROUPS = { "party", "raid", "ownPet", "groupPets", "npc" }
+local GROUPS = { "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }
 local popup, checks
 
 local function setAll(on)

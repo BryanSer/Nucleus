@@ -9,9 +9,7 @@ local function unpackColor(c)
     return c[1], c[2], c[3], c[4] or 1
 end
 
--- Pixel-snapped anchoring so every 1px line rasterizes to exactly one physical pixel at any UI
--- scale. Without it, identical SetHeight(1) textures land on different sub-pixel offsets and read
--- as different thicknesses.
+-- Pixel-snapped anchoring so 1px lines rasterize to one physical pixel at any UI scale.
 local PU = PixelUtil or PixelUtil_Mixin
 local function px_point(region, ...)
     if PU and PU.SetPoint then PU.SetPoint(region, ...) else region:SetPoint(...) end
@@ -47,9 +45,7 @@ function N.Hairline(parent, dir, off, color, a, b)
     return t
 end
 
--- Apply the matte panel look to any frame. Creates 4 edge lines + optional
--- fill on first call, reuses them afterwards. borderColor defaults to hard
--- black; pass M.color.borderSoft for the lighter card/nav treatment.
+-- Matte panel look for any frame (4 edge lines + optional fill, reused). borderColor defaults to black.
 function N.SkinPanel(frame, fillColor, borderColor, noHighlight)
     if not frame._nucFill then
         local fill = frame:CreateTexture(nil, "BACKGROUND")
@@ -91,10 +87,8 @@ function N.SkinPanel(frame, fillColor, borderColor, noHighlight)
     frame._nucFill:SetColorTexture(unpackColor(fillColor or M.color.frameBg))
 end
 
--- Rounded skin for the options UI. Same contract as SkinPanel (frame._nucFill, frame._nucBorder,
--- N.SetPanelBorder keep working), but fill and 1px rim are 9-sliced rounded-rect textures.
--- SetVertexColor tints them, so each texture gets a SetColorTexture shim that routes to it and
--- every existing fill:SetColorTexture(r,g,b,a) call stays untouched.
+-- Rounded skin for the options UI, same contract as SkinPanel; fill and rim are 9-sliced textures with a
+-- SetColorTexture shim, so existing fill:SetColorTexture calls keep working.
 local function tintable(tex)
     tex.SetColorTexture = function(self, r, g, b, a) self:SetVertexColor(r, g, b, a or 1) end
     return tex
@@ -128,9 +122,7 @@ function N.SkinRound(frame, fillColor, borderColor, small)
     frame._nucFill:SetColorTexture(unpackColor(fillColor or M.color.card))
 end
 
--- Soft drop shadow behind a frame: one 9-sliced texture that bleeds past the
--- frame edge (textures are not clipped to their frame). `spread` is how far it
--- reaches; the source texture keeps its solid core 14px in from its own edge.
+-- Soft drop shadow: one 9-sliced texture that bleeds past the frame edge; `spread` is how far.
 function N.AddShadow(frame, spread, alpha, dy)
     spread = spread or 14
     local sh = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
@@ -223,10 +215,8 @@ function N.SetBarLossColor(bar, color)
     if bar._nucLoss then bar._nucLoss:SetColorTexture(unpackColor(color or M.color.healthLoss)) end
 end
 
--- Fonts (General > Interface / Fonts): every text made here is remembered with its base size.
--- Texts inside the options window (a root frame flagged _nucUI) use the window font and the
--- font scale; texts under a root flagged _nucFace use the window font without scaling (dialogs).
--- Everything else is frame text: it only follows the frame font and keeps its own size.
+-- Fonts: every text made here is remembered with its base size. Texts under a _nucUI root use the window font and
+-- the font scale, under _nucFace the window font unscaled; everything else follows the frame font.
 local fontRegistry = setmetatable({}, { __mode = "k" })
 local fontPending
 

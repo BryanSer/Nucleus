@@ -57,9 +57,7 @@ local UNIT_EVENTS = {
     "UNIT_HEAL_ABSORB_AMOUNT_CHANGED",
 }
 
---------------------------------------------------------------------------------
 -- Visual construction
---------------------------------------------------------------------------------
 
 local function snap(frame, v)
     local PU = _G.PixelUtil
@@ -85,9 +83,8 @@ function UF.CreateVisual(b, key)
     N.SkinBar(health)
     b.health = health
 
-    -- Incoming heal / absorb / heal-absorb are StatusBars on health's scale, anchored to health's
-    -- fill texture with a plain pixel width. SetValue(amount) alone then gives the right fraction,
-    -- so no arithmetic on secret numbers is needed (see Core/Secret.lua).
+    -- Incoming heal / absorb / heal-absorb are StatusBars on health's scale, anchored to its fill texture with a pixel
+    -- width: SetValue(amount) gives the fraction without arithmetic on secrets (Core/Secret.lua).
     local overlayClip = CreateFrame("Frame", nil, b)
     overlayClip:SetAllPoints(health)
     overlayClip:SetClipsChildren(true)
@@ -148,9 +145,8 @@ function UF.CreateVisual(b, key)
     overAbsorb:Hide()
     b.overAbsorb = overAbsorb
 
-    -- Blizzard's calculator gives the absorb clamped to missing health plus a non-secret overflow
-    -- flag for the overshield spark. The clamp mode is re-applied before every call in render(),
-    -- it doesn't reliably stick if set once.
+    -- The calculator gives the absorb clamped to missing health plus an overflow flag; the clamp mode is re-applied
+    -- before every call in render() because it doesn't reliably stick.
     if _G.CreateUnitHealPredictionCalculator then
         b.healCalc = CreateUnitHealPredictionCalculator()
     end
@@ -232,8 +228,14 @@ local function pOn(b, name, enabled)
     return enabled or b._previewOnly == name or (b._previewOnly == "actions" and name == "name")
 end
 
+-- Font outline of a text indicator: thin (default), thick or none.
+local OUTLINES = { thin = "OUTLINE", thick = "THICKOUTLINE", none = "" }
+function UF.Outline(o)
+    return OUTLINES[o and o.outline or "thin"] or "OUTLINE"
+end
+
 local function styleText(fs, o, dim)
-    fs:SetFont(M.font, o.size or 11, "OUTLINE")
+    fs:SetFont(M.font, o.size or 11, UF.Outline(o))
     local c = (dim and M.color.textDim) or o.color or M.color.text
     fs:SetTextColor(c[1], c[2], c[3])
 end
@@ -266,10 +268,7 @@ end
 
 UF.PlaceText = placeText
 
--- Shield/heal-absorb/heal-prediction overlay: texture and tiling (a real pattern instead of a
--- stretched smear) and tint, from Appearance > Shield. Color and opacity live here, not in
--- render(), since they're settings and not per-update data; render() only touches SetValue on
--- these bars.
+-- Overlay texture, tiling and tint come from Appearance > Shield; render() only touches SetValue on these bars.
 local function applyShieldStyle(bar, cfg)
     local tex = M.shieldTextures[cfg.style] or M.flat
     bar:SetStatusBarTexture(tex)
@@ -399,9 +398,8 @@ function UF.LayoutBars(b)
     b.health:SetPoint("TOPLEFT", b, "TOPLEFT", snap(b, 1), snap(b, -1))
     b.health:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", snap(b, -1), snap(b, 1 + (ph > 0 and ph + 1 or 0)))
 
-    -- Text width comes from the configured frame width (health width resolves late), so long names
-    -- truncate instead of overflowing. One anchor point plus an explicit width lets the X/Y
-    -- offsets actually move the text.
+    -- Text width comes from the configured frame width so long names truncate; one anchor plus an explicit width
+    -- lets the X/Y offsets move the text.
     local textW = N.db[b.groupKey].width - 6
     local name, hp = ind.name, ind.healthText
     styleText(b.nameText, name)
@@ -451,9 +449,7 @@ function UF.LayoutBars(b)
     if N.Auras then N.Auras.Layout(b) end
 end
 
---------------------------------------------------------------------------------
 -- Data
---------------------------------------------------------------------------------
 
 local IsSecret, AnySecret = N.IsSecret, N.AnySecret
 
@@ -480,14 +476,24 @@ local function readUnit(b)
     b.isTarget = (not IsSecret(tgt)) and tgt == true
 end
 
---------------------------------------------------------------------------------
 -- Rendering
---------------------------------------------------------------------------------
 
--- Class color, a fixed custom color, or a red->yellow->green health gradient.
--- The gradient only ever runs arithmetic on N.HealthFraction's result, which
--- is nil whenever the true fraction isn't safely known - never on hp/hpMax
--- directly, so it can't throw on a Midnight secret.
+-- Class color, a fixed custom color, or a red-yellow-green gradient (red at 0, yellow at 50 %, green at 100 %).
+-- The gradient only does arithmetic on N.HealthFraction, which is nil when the value isn't safely known.
+local gradientCurve
+local function healthGradientCurve()
+    if gradientCurve ~= nil then return gradientCurve or nil end
+    gradientCurve = false
+    if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
+        local curve = C_CurveUtil.CreateColorCurve()
+        curve:AddPoint(0, CreateColor(1, 0, 0, 1))
+        curve:AddPoint(0.5, CreateColor(1, 1, 0, 1))
+        curve:AddPoint(1, CreateColor(0, 1, 0, 1))
+        gradientCurve = curve
+    end
+    return gradientCurve or nil
+end
+
 local function healthColor(b, appearance)
     local mode = appearance.healthColorMode
     if mode == "custom" then
@@ -505,6 +511,15 @@ local function healthColor(b, appearance)
             else
                 return 1 - (frac - 0.5) * 2, 1, 0
             end
+        end
+        -- Hidden health: the game evaluates the curve, the colour goes straight to the bar.
+        local curve = healthGradientCurve()
+        if curve and b.unit and b.healCalc and _G.UnitGetDetailedHealPrediction then
+            local ok, r, g, bl = pcall(function()
+                UnitGetDetailedHealPrediction(b.unit, nil, b.healCalc)
+                return b.healCalc:EvaluateCurrentHealthPercent(curve):GetRGB()
+            end)
+            if ok and r ~= nil then return r, g, bl end
         end
     end
     return N.ClassRGB(b.class)
@@ -534,9 +549,7 @@ local function hpPercent(b)
     return pct
 end
 
--- Missing health as "-12.3K", blank when nothing is missing. When the number is
--- secret, TruncateWhenZero (a secret-safe sink) blanks the zero case and the
--- text stays unreadable-but-showable.
+-- Missing health as "-12.3K", blank when nothing is missing; TruncateWhenZero blanks the zero case of a secret.
 local function setDeficitText(b, fs)
     local missing
     if _G.UnitHealthMissing and b.unit then missing = UnitHealthMissing(b.unit, true) end
@@ -600,9 +613,7 @@ local function powerPercent(b)
     return nil
 end
 
--- The colour of the unit's power type (mana blue, rage red, energy yellow, runic
--- power cyan, ...). Blizzard's PowerBarColor knows most tokens; the rest have a
--- fallback so no class ever ends up on the wrong colour.
+-- Power type color: Blizzard's PowerBarColor, with fallbacks so no class ends up on the wrong color.
 local POWER_FALLBACK = {
     MANA = { 0.00, 0.00, 1.00 }, RAGE = { 1.00, 0.00, 0.00 }, FOCUS = { 0.867, 0.573, 0.216 },
     ENERGY = { 1.00, 0.96, 0.41 }, COMBO_POINTS = { 1.00, 0.96, 0.41 }, RUNES = { 0.50, 0.50, 0.50 },
@@ -682,9 +693,7 @@ local function render(b)
 
     local ind = N.db[b.groupKey].indicators
 
-    -- The power bar's visibility is re-checked on every paint: a bar shown although it's switched
-    -- off, or hidden although it's on, is put right here instead of waiting for the next layout
-    -- pass.
+    -- The power bar's visibility is re-checked on every paint instead of waiting for the next layout pass.
     local wantPower = pOn(b, "powerBar", ind.powerBar.enabled) and b._powerShown and pShow(b, "powerBar")
     if (wantPower and true or false) ~= (b.power:IsShown() and true or false) then UF.LayoutBars(b) end
 
@@ -718,9 +727,8 @@ local function render(b)
         setPowerText(b, b.powerText, ind.powerBar)
     end
 
-    -- heal prediction / absorb shield / heal-absorb: see CreateVisual for why
-    -- these are StatusBars anchored to health's fill texture rather than
-    -- Lua-computed pixel segments - it's what makes this secret-safe.
+    -- heal prediction / absorb / heal-absorb: StatusBars on health's fill texture (see CreateVisual), which is what
+    -- keeps it secret-safe.
     if b._previewOnly or not b.connected then
         b.healPredict:Hide()
         b.absorb:Hide()
@@ -805,9 +813,7 @@ function UF.ApplyMock(b, m)
     render(b)
 end
 
---------------------------------------------------------------------------------
 -- Secure header wiring (real units)
---------------------------------------------------------------------------------
 
 local function bindUnit(b)
     local unit = (b._secure or b):GetAttribute("unit")
@@ -833,6 +839,24 @@ end
 
 local function onEvent(b)
     fullUpdate(b)
+end
+
+-- Alpha as a function of health: full below the threshold, the out-of-range alpha above it. The
+-- game evaluates the curve, so it works while health is hidden (the result goes to SetAlpha).
+local fadeCurve, fadeKey
+local function healthFadeCurve(threshold, dim)
+    local key = threshold .. "|" .. dim
+    if fadeKey == key then return fadeCurve end
+    fadeKey, fadeCurve = key, nil
+    if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
+        local curve = C_CurveUtil.CreateColorCurve()
+        curve:AddPoint(0, CreateColor(1, 1, 1, 1))
+        curve:AddPoint(math.max(threshold - 0.001, 0.001), CreateColor(1, 1, 1, 1))
+        curve:AddPoint(math.max(threshold, 0.002), CreateColor(1, 1, 1, dim))
+        curve:AddPoint(1, CreateColor(1, 1, 1, dim))
+        fadeCurve = curve
+    end
+    return fadeCurve
 end
 
 local function onUpdate(b, elapsed)
@@ -868,9 +892,25 @@ local function onUpdate(b, elapsed)
         alpha = appearance.outOfRangeAlpha
     elseif appearance.healthFade.enabled then
         -- HealthFraction is nil when the value isn't safely known: the fade then just stays off.
+        local threshold = appearance.healthFade.threshold or 1
         local frac = N.HealthFraction(b.unit)
-        if frac and frac >= (appearance.healthFade.threshold or 1) then
-            alpha = appearance.outOfRangeAlpha
+        if frac then
+            if frac >= threshold then alpha = appearance.outOfRangeAlpha end
+        else
+            -- hidden health: let the game pick the alpha from a curve
+            local curve = healthFadeCurve(threshold, appearance.outOfRangeAlpha)
+            if curve and b.healCalc and _G.UnitGetDetailedHealPrediction then
+                local ok, a = pcall(function()
+                    UnitGetDetailedHealPrediction(b.unit, nil, b.healCalc)
+                    local _, _, _, al = b.healCalc:EvaluateCurrentHealthPercent(curve):GetRGBA()
+                    return al
+                end)
+                if ok and a ~= nil then
+                    b.curAlpha = nil
+                    b:SetAlpha(a)
+                    return
+                end
+            end
         end
     end
     b.curAlpha = alpha
@@ -898,10 +938,8 @@ local function queueBind(b, what)
     end
 end
 
--- SecureGroupHeader children are Blizzard's frames. Nothing of ours is written into their Lua
--- tables: everything Nucleus draws and tracks lives on a plain frame (the "visual") that sits
--- inside the secure button and follows it. The secure button only keeps clicks, attributes and
--- hooks. Our own pet/companion buttons are not header children and carry the visual directly.
+-- Header children are Blizzard's frames: nothing of ours is written into their tables. Our drawing lives on a
+-- plain "visual" frame inside the secure button; the button only keeps clicks, attributes and hooks.
 local visualOf = setmetatable({}, { __mode = "k" })
 local plainStyled = setmetatable({}, { __mode = "k" })
 
@@ -938,9 +976,8 @@ function N.StyleUnitButton(name)
     end
     UF.CreateVisual(b, key)
 
-    -- A button only reacts to the mouse buttons it is registered for, and a plain Button knows
-    -- only the left one. Without this, right/middle/extra-button click-casting and the right-click
-    -- menu never fire.
+    -- A plain Button knows only the left mouse button; without this, right / middle / extra-button click-casting and
+    -- the menu never fire.
     child:RegisterForClicks("AnyUp")
 
     -- Ping system: with this, the ping key pings the unit this frame shows
@@ -991,6 +1028,26 @@ local function forEachButton(fn)
     end
 end
 UF.ForEachButton = forEachButton
+
+-- Roster changes: a button keeps its unit token ("party2") while the person behind it changes, and no unit event
+-- says so. Each button is checked against the GUID it last drew, deferred so it never runs in the header update.
+local rosterWatch = CreateFrame("Frame")
+rosterWatch:RegisterEvent("GROUP_ROSTER_UPDATE")
+local function checkGuids()
+    forEachButton(function(b)
+        if b.unit and b:IsShown() then
+            local guid = UnitGUID(b.unit)
+            if N.IsSecret(guid) or guid ~= b._drawnGuid then
+                b._drawnGuid = guid
+                fullUpdate(b)
+            end
+        end
+    end)
+end
+rosterWatch:SetScript("OnEvent", function()
+    C_Timer.After(0, checkGuids)
+    C_Timer.After(0.5, checkGuids)
+end)
 
 local relayoutPending
 function N.RefreshAllButtons()

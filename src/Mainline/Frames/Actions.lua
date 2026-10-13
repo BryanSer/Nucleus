@@ -2,17 +2,10 @@ local _, ns = ...
 local N = ns.N
 local IsSecret = N.IsSecret
 
--- Actions: a short animation on a group member's frame when they use a listed spell (potion,
--- Healthstone, trinket). The list, animation and color are settings (N.db.actions). The display is
--- global, not per party/raid, because it reacts to casts, not to unit state.
---
--- The cast comes from UNIT_SPELLCAST_SUCCEEDED, whose spell ID can be hidden on Midnight; a hidden
--- ID is ignored.
---
--- Animations (all clipped to the frame):
---   sweep  a colored band rises from the bottom to the top
---   wipe   a colored band moves from left to right
---   rise   the spell icon floats up from the middle and fades
+-- Actions: a short animation on a member's frame when they use a listed spell (potion, Healthstone, ...).
+-- Display only, so global rather than per group. The spell ID of UNIT_SPELLCAST_SUCCEEDED can be hidden; such
+-- casts are ignored. Animations (clipped to the frame): sweep (band rises), wipe (band moves left to right),
+-- rise (the spell icon floats up and fades).
 
 local Actions = {}
 N.Actions = Actions
@@ -59,9 +52,7 @@ local function build(b)
     clip:Hide()
     set.clip = clip
 
-    -- sweep / wipe: one band, re-anchored per play. Built from a few solid strips of rising
-    -- opacity (soft leading edge) instead of a gradient texture, so the color stays exactly the
-    -- chosen one.
+    -- sweep / wipe: one band built from solid strips of rising opacity, so the color stays exact.
     local band = CreateFrame("Frame", nil, clip)
     band:Hide()
     set.band = band

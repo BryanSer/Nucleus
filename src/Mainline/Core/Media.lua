@@ -9,15 +9,12 @@ N.Media = M
 -- 1px white texture for every bar and border fill.
 M.flat = "Interface\\Buttons\\WHITE8X8"
 
--- Bar fill textures, selectable per group type (Appearance > Color). "flat" is ours (solid tint,
--- no shading); "gradient" and "modern" are Blizzard textures the client already has. A flat tint
--- reads paler than a shaded bar with the same class color.
+-- Bar fill textures per group type (Appearance > Color); "flat" is ours, the others are Blizzard textures.
 M.barTextures = {
     flat     = "Interface\\Buttons\\WHITE8X8",
     gradient = "Interface\\TargetingFrame\\UI-StatusBar",
     modern   = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill",
-    -- Default: a uniform 76.5% grey (NucleusBar3.tga, made by tools/gen_textures.ps1). Grey rather
-    -- than white so SetStatusBarColor darkens the tint to a flat, matte class color, no sheen.
+    -- Default: uniform grey (NucleusBar3.tga), so SetStatusBarColor gives a flat, matte class color.
     nucleus  = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusBar3.tga",
     -- Uniform white fill: the class/custom color shows fully flat across the bar.
     nucleus2 = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusBar2.tga",
@@ -25,9 +22,7 @@ M.barTextures = {
     nucleus3 = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusBar.tga",
 }
 
--- Shield/absorb overlay textures (Appearance > Shield). "flat" is a plain wash; "striped" is a
--- 45-degree pattern, white RGB with the stripes in the alpha channel, tiled horizontally, so
--- SetStatusBarColor's tint and alpha give the shield color real texture.
+-- Shield overlay textures: "flat" wash and "striped" (45-degree stripes in the alpha channel).
 M.shieldTextures = {
     flat    = "Interface\\Buttons\\WHITE8X8",
     striped = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusShield.tga",
@@ -49,8 +44,7 @@ M.FONTS = {
     { key = "morpheus", text = "Morpheus",       path = "Fonts/MORPHEUS.ttf" },
 }
 
--- These languages need glyphs the bundled font and the Latin Blizzard fonts don't have, so the
--- matching Blizzard font is used for them unless "Game default" is picked.
+-- These languages need glyphs the bundled font lacks: the matching Blizzard font is used unless "Game default".
 M.LOCALE_FONTS = {
     ruRU = "Fonts/FRIZQT___CYR.TTF",
     koKR = "Fonts/2002.TTF",
@@ -86,9 +80,8 @@ end
 
 
 
--- Shape textures for the options UI (tools/gen_textures.ps1): white RGB, the alpha carries the
--- shape, tinted with SetVertexColor. round and roundSm are 9-sliced (SetTextureSliceMargins) so
--- one small file fits any panel; circle is a plain dot; shadow is a 9-sliced soft glow.
+-- Shape textures of the options UI: white RGB, shape in alpha, tinted by SetVertexColor; round and roundSm
+-- are 9-sliced.
 local TEX = "Interface\\AddOns\\Nucleus\\Media\\Textures\\"
 M.tex = {
     round   = TEX .. "NucleusRound.tga",   -- 32px, radius 8, slice margin 9
@@ -141,11 +134,8 @@ M.color = {
     tank        = { 0.20, 0.55, 0.95, 1.00 },
 }
 
--- Recolors every accent-derived entry from one base {r,g,b} (General > Interface > Highlight
--- color), keeping each entry's alpha and brightness relative to the accent. The color tables are
--- changed in place, so anything holding a reference sees the new values. Textures that baked a
--- color in via SetColorTexture only update when something repaints them, which is what N.OnRecolor
--- below is for.
+-- Recolors every accent-derived entry from one base {r,g,b} (General > Interface > Highlight color), in place.
+-- Textures that baked a color in repaint through N.OnRecolor.
 function N.ApplyAccentColor(rgb)
     rgb = rgb or { 0.20, 0.55, 0.95 }
     local r, g, b = rgb[1], rgb[2], rgb[3]
@@ -163,9 +153,7 @@ function N.ApplyAccentColor(rgb)
     set3(M.color.paneRule, r, g, b)
 end
 
--- Widgets that bake the accent into a texture (SetColorTexture copies the value) register a
--- repaint closure here. N.Recolor changes the palette and then calls all of them, so an open
--- options window updates live.
+-- Widgets that bake the accent into a texture register a repaint closure here; N.Recolor calls them.
 local recolorHooks = {}
 function N.OnRecolor(fn) recolorHooks[#recolorHooks + 1] = fn end
 
@@ -174,14 +162,10 @@ function N.Recolor(rgb)
     for _, fn in ipairs(recolorHooks) do pcall(fn) end
 end
 
--- Use this instead of N.ApplyAccentColor when the UI may already be built (from the options
--- window), so the change shows without a /reload.
+-- Use when the UI is already built: the change shows without a /reload.
 
--- Class color as {r,g,b}, using Blizzard's fixed class colors. Not CUSTOM_CLASS_COLORS: that
--- follows the player's own override and would drift from the real colors.
--- C_ClassColor.GetClassColor is the modern accessor for the same table as RAID_CLASS_COLORS.
--- Everything is pcall-guarded: a bad or secret class token must not abort the render that also
--- paints name, health text and power. Worst case it falls back to grey.
+-- Class color as {r,g,b} from Blizzard's fixed colors (not CUSTOM_CLASS_COLORS). pcall-guarded: a bad or secret
+-- class token must not abort the render; the fallback is grey.
 function N.ClassRGB(class)
     if class == nil then return 0.6, 0.6, 0.6 end
 

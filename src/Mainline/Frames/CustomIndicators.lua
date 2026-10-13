@@ -5,22 +5,9 @@ local A = N.Auras
 local Indicators = N.Indicators
 local IsSecret = N.IsSecret
 
--- Custom indicators: the player builds their own from Options > Indicators > "+". Each watches a
--- list of spells (buffs or debuffs, optionally only the player's own) on every unit frame and
--- shows while one of them is present.
---
---   icon / icons  one aura icon (cooldown, stacks) / up to N icons
---   text          stacks, remaining time or fixed text
---   rect          a colored block (works like an icon)
---   color         a colored area (solid, gradient or class color)
---   bar           a small bar that runs down with the aura
---   glow          the whole frame glows (pixel, halo or pulse)
---   border        a colored frame border
---   overlay       a tint over the health bar
---
--- Entries live in N.db[group].customIndicators (a list). Matching needs the aura's spell ID: when
--- the game hides it nothing matches. With "only mine" the game itself limits the auras to the
--- player's.
+-- Custom indicators: built in Options > Indicators > "+". Each watches a spell list on every unit frame and
+-- shows while one is present. Types: icon / icons, text, rect, color, bar, glow, border, overlay. Entries live
+-- in N.db[group].customIndicators. Matching needs the spell ID (nothing matches while the game hides it).
 
 local CI = {}
 N.CustomIndicators = CI
@@ -37,7 +24,7 @@ end
 function CI.NewEntry(kind, name)
     local e = {
         id = newID(), name = name, type = kind, enabled = true,
-        aura = "buff", mine = true, spells = "",
+        aura = "buff", mine = true, castBy = "me", spells = "",
         point = "TOPRIGHT", x = 0, y = 0, color = { 1.00, 0.80, 0.20 },
         size = 16, max = 3, spacing = 1, perRow = 8, lineSpacing = 1, growth = "LEFT",
         showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = false,
@@ -85,9 +72,7 @@ local function parseList(str)
     return set
 end
 
---------------------------------------------------------------------------------
 -- Matching auras
---------------------------------------------------------------------------------
 
 -- Spells that custom indicators with "remove from Buffs" claim for themselves:
 -- the Buffs row skips them. Returns a set, or nil when there are none.
@@ -107,6 +92,10 @@ function CI.BuffExclusions(groupKey)
     return out
 end
 
+-- Who must have cast the aura: "me", "others" (anyone but me) or "all". Older entries only have
+-- the `mine` flag.
+local function castBy(e) return e.castBy or (e.mine and "me" or "all") end
+
 local SAMPLE_ICONS = { 135953, 136041, 135987 }
 
 local function collect(b, e, out)
@@ -122,19 +111,22 @@ local function collect(b, e, out)
     local set = parseList(e.spells)
     if not (set and b.unit and C_UnitAuras) then return end
     local base = (e.aura == "debuff") and "HARMFUL" or "HELPFUL"
-    local filter = e.mine and (base .. "|PLAYER") or base
-    for _, d in ipairs(N.AuraCache.Each(b.unit, filter)) do
+    local by = castBy(e)
+    local mineSet
+    if by ~= "all" then
+        mineSet = {}
+        for _, d in ipairs(N.AuraCache.Each(b.unit, base .. "|PLAYER")) do mineSet[d] = true end
+    end
+    for _, d in ipairs(N.AuraCache.Each(b.unit, base)) do
         local id = d.spellId
-        if id ~= nil and not IsSecret(id) and set[id] then
+        if id ~= nil and not IsSecret(id) and set[id] and (not mineSet or ((by == "me") == (mineSet[d] == true))) then
             out[#out + 1] = d
             if #out >= want then break end
         end
     end
 end
 
---------------------------------------------------------------------------------
 -- Widgets, one set per entry and unit button
---------------------------------------------------------------------------------
 
 local function anchorOf(b, e, frame, extraX, extraY)
     local ax, ay = A.EdgeSign(e.point)
@@ -434,10 +426,8 @@ builders.overlay = function(b)
 end
 
 -- glow -------------------------------------------------------------------------
--- A glow around the whole frame, drawn with plain textures and animations:
---   pixel  short lines running around the border
---   halo   a soft colored glow behind the frame, pulsing
---   pulse  a solid colored border that pulses
+-- Glow around the whole frame from plain textures and animations: pixel (running lines), halo (pulsing glow),
+-- pulse (pulsing border).
 local PROC_ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
 
 -- Position s (0..1, clockwise from the top-left corner) on a w x h rectangle:
@@ -490,9 +480,7 @@ local function widgetFor(b, obj, e)
     return w
 end
 
---------------------------------------------------------------------------------
 -- Indicator hook
---------------------------------------------------------------------------------
 
 -- Engine path (Retail 12.1+): each entry is one aura container of the game's own
 -- (Frames/AuraEngine.lua), so it keeps working in combat. Glows are not available there.
@@ -506,7 +494,8 @@ local function engineSpec(b, e)
     local set = parseList(e.spells)
     if not (set and next(set)) then return nil end
     local base = (e.aura == "debuff") and "HARMFUL" or "HELPFUL"
-    local filter = e.mine and (base .. "|PLAYER") or base
+    local by = castBy(e)
+    local filter = (by == "me" and (base .. "|PLAYER")) or (by == "others" and (base .. "|!PLAYER")) or base
     local appearance = N.db[b.groupKey].appearance
     local shape = (e.type == "icons" or e.type == "icon") and "icon" or e.type
     if e.type == "color" then shape = ((e.colorArea or "free") == "free") and "rect" or "overlay" end

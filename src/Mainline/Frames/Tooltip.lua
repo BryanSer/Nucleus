@@ -17,7 +17,14 @@ function TT.Attach(button)
     local target = button._secure or button -- the secure button gets the mouse
     target:HookScript("OnEnter", function()
         if not button.unit or not shouldShow() then return end
-        GameTooltip:SetOwner(target, "ANCHOR_TOPLEFT")
+        local where = N.db.tooltip.anchor
+        if where == "default" and _G.GameTooltip_SetDefaultAnchor then
+            GameTooltip_SetDefaultAnchor(GameTooltip, target)
+        elseif where == "cursor" then
+            GameTooltip:SetOwner(target, "ANCHOR_CURSOR")
+        else
+            GameTooltip:SetOwner(target, "ANCHOR_TOPLEFT")
+        end
         GameTooltip:SetUnit(button.unit)
         GameTooltip:Show()
     end)

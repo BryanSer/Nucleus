@@ -4,19 +4,21 @@ local M = N.Media
 local Indicators = N.Indicators
 local IsSecret = N.IsSecret
 
--- Missing Buffs: an icon on a unit's frame for every raid buff it lacks. Standalone, reads the
--- unit's auras itself. A buff only counts as expected when someone in the group can provide it,
--- and only buffs enabled in the settings are checked.
---
--- Midnight can hide spell IDs on other units. If any aura on the unit has a hidden ID the answer
--- is unknown and nothing is shown (better silent than a false "missing"). The scan runs in a
--- timer, never inside the secure header's update, and the result is cached on the button.
+-- Missing Buffs: an icon per raid buff a unit lacks, when someone in the group can provide it and the buff is
+-- enabled. A hidden aura ID makes the answer unknown, so nothing is shown. The scan runs in a timer, not in the
+-- header's update, and is cached on the button.
 
 local BUFFS = N.Classic.BUFFS
 Indicators.missingBuffs = BUFFS
 
+-- The single blessings come after the entries, so their IDs map to the blessing, not to "blessing".
+local BLESSINGS = N.Classic.BLESSINGS
+local ALL = {}
+for _, buff in ipairs(BUFFS) do ALL[#ALL + 1] = buff end
+for _, sub in ipairs(BLESSINGS) do ALL[#ALL + 1] = sub end
+
 local idToKey = {}
-for _, buff in ipairs(BUFFS) do
+for _, buff in ipairs(ALL) do
     for _, id in ipairs(buff.ids) do idToKey[id] = buff.key end
 end
 
@@ -53,7 +55,7 @@ local nameToKey
 local function names()
     if nameToKey then return nameToKey end
     nameToKey = {}
-    for _, buff in ipairs(BUFFS) do
+    for _, buff in ipairs(ALL) do
         for _, id in ipairs(buff.ids) do
             local name = C_Spell and C_Spell.GetSpellName and C_Spell.GetSpellName(id)
             if name then nameToKey[name] = buff.key end
@@ -90,8 +92,21 @@ local function scan(u, o)
     end
     local missing = {}
     for _, buff in ipairs(BUFFS) do
-        if o.buffs and o.buffs[buff.key] ~= false and canCast(buff) and not present[buff.key] then
-            missing[#missing + 1] = buff.key
+        if o.buffs and o.buffs[buff.key] ~= false then
+            if buff.key == "blessing" then
+                -- missing while none of the enabled blessings is on them (and the player can cast one)
+                local wanted, have, can = false, false, false
+                for _, sub in ipairs(BLESSINGS) do
+                    if o.buffs[sub.key] ~= false then
+                        wanted = true
+                        if present[sub.key] then have = true end
+                        if canCast(sub) then can = true end
+                    end
+                end
+                if wanted and can and not have then missing[#missing + 1] = buff.key end
+            elseif canCast(buff) and not present[buff.key] then
+                missing[#missing + 1] = buff.key
+            end
         end
     end
     -- Only trust "missing" when every aura was readable.
@@ -155,7 +170,14 @@ Indicators.Register("missingBuffs", {
         if b._mock then
             keys = {}
             for _, buff in ipairs(BUFFS) do
-                if o.buffs and o.buffs[buff.key] ~= false then keys[#keys + 1] = buff.key end
+                local on = o.buffs and o.buffs[buff.key] ~= false
+                if on and buff.key == "blessing" then
+                    on = false
+                    for _, sub in ipairs(BLESSINGS) do
+                        if o.buffs[sub.key] ~= false then on = true break end
+                    end
+                end
+                if on then keys[#keys + 1] = buff.key end
             end
         else
             refresh(b)

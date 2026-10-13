@@ -1,13 +1,9 @@
 local _, ns = ...
 local N = ns.N
 
--- WoW Forever is a Classic game on Retail's API. This file is the one place that says what differs
--- from Retail: which classes exist, what each can dispel, the spell lists for the aura rows, the
--- raid buffs to check and the potions Actions reacts to. Everything else in the Forever copy reads
--- from here.
---
--- Spell IDs are Classic, rank by rank. A rank the client doesn't know is dropped at load
--- (N.Classic.Known), so a wrong ID costs nothing.
+-- Everything that differs from Retail: the classes, what each can dispel, the spell lists of the aura rows, the
+-- raid buffs to check and the potions Actions reacts to. Spell IDs are Classic, rank by rank; a rank the client
+-- doesn't know is dropped at load (N.Classic.Known).
 
 N.IS_FOREVER = true
 local C = {}
@@ -18,7 +14,7 @@ C.CLASSES = { "DRUID", "HUNTER", "MAGE", "PALADIN", "PRIEST", "ROGUE", "SHAMAN",
 C.CLASS_SET = {}
 for _, c in ipairs(C.CLASSES) do C.CLASS_SET[c] = true end
 
--- Forever's own specialization IDs (one per class).
+-- One specialization ID per class (for the class icon).
 C.SPEC_ID = {
     MAGE = 1482, DRUID = 1484, HUNTER = 1485, PALADIN = 1486, PRIEST = 1487,
     ROGUE = 1488, SHAMAN = 1489, WARLOCK = 1490, WARRIOR = 1491,
@@ -108,8 +104,7 @@ for _, t in ipairs({ C.externalClass, C.offensiveClass, C.healingClass }) do
     for id, cls in pairs(t) do C.spellClass[id] = C.spellClass[id] or cls end
 end
 
--- Default lists as the strings the settings hold (all ranks; unknown ranks are
--- harmless, they never match an aura).
+-- Default lists as the strings the settings hold (all ranks; unknown ranks never match an aura).
 C.LIST = {
     defensives = csv(C.defensiveList),
     externals = csv(C.externalList),
@@ -117,19 +112,16 @@ C.LIST = {
     buffs = csv(C.healingList),
 }
 
--- Raid buffs (Missing Buffs). Every family lists all spells that give the buff: group version and
--- every rank included. `class` = who can provide it.
---
--- Each family: `ids` = every spell that puts the buff on a member (all ranks, the group version,
--- NPC and item casts); `cast` = the ranks the player trains plus the group version, used to test
--- "the player can cast it"; `icon` = the spell whose icon stands for the buff. The five Paladin
--- blessings are ONE entry: a member only counts as missing it while they have none of them (normal
--- or Greater).
+-- Raid buffs (Missing Buffs). `ids` = every spell that puts the buff on a member (all ranks, group version, NPC
+-- and item casts); `cast` = the ranks the player trains plus the group version ("the player can cast it");
+-- `icon` = the spell whose icon stands for the buff; `class` = who provides it.
 local FAMILY = {
     fort = { ids = { 1243, 1244, 1245, 2791, 10937, 10938, 10939, 10940, 13864, 23947, 23948, 21562, 21564, 450086 },
              cast = { 1243, 1244, 1245, 2791, 10937, 10938, 21562, 21564 } },
     spirit = { ids = { 14752, 14818, 14819, 16875, 27841, 27681 },
                cast = { 14752, 14818, 14819, 27841, 27681 } },
+    shadowprot = { ids = { 976, 10957, 10958, 25433, 27683, 39374 },
+                   cast = { 976, 10957, 10958, 25433, 27683, 39374 } },
     intellect = { ids = { 1459, 1460, 1461, 10156, 10157, 13326, 16876, 364161, 23028 },
                   cast = { 1459, 1460, 1461, 10156, 10157, 23028 } },
     mark = { ids = { 1126, 5232, 5234, 5286, 5287, 6756, 8907, 8908, 9884, 9885, 16878, 24752, 364163, 1291335, 1310503, 21849, 21850 },
@@ -158,6 +150,8 @@ C.BUFFS = {
       ids = FAMILY.fort.ids, cast = FAMILY.fort.cast },
     { key = "spirit",    label = "Divine Spirit",         class = "PRIEST", icon = 14752,
       ids = FAMILY.spirit.ids, cast = FAMILY.spirit.cast },
+    { key = "shadowprot", label = "Shadow Protection",    class = "PRIEST", icon = 976, localized = true,
+      ids = FAMILY.shadowprot.ids, cast = FAMILY.shadowprot.cast },
     { key = "intellect", label = "Arcane Intellect",      class = "MAGE",   icon = 1459,
       ids = FAMILY.intellect.ids, cast = FAMILY.intellect.cast },
     { key = "mark",      label = "Mark of the Wild",      class = "DRUID",  icon = 1126,
@@ -170,7 +164,30 @@ C.BUFFS = {
       ids = union({ "might", "wisdom", "kings", "salvation", "light" }, "ids"),
       cast = union({ "might", "wisdom", "kings", "salvation", "light" }, "cast") },
 }
-C.BUFF_DEFAULT = { fort = true, spirit = true, intellect = true, mark = true, thorns = true, shout = true, blessing = true }
+-- The blessings behind the "Blessings" entry: a member counts as missing it while they have none
+-- of the ENABLED ones. Names come from the client, so they are localized.
+C.BLESSINGS = {
+    { key = "might",     label = "Blessing of Might",     class = "PALADIN", icon = 19740,
+      ids = FAMILY.might.ids, cast = FAMILY.might.cast },
+    { key = "wisdom",    label = "Blessing of Wisdom",    class = "PALADIN", icon = 19742,
+      ids = FAMILY.wisdom.ids, cast = FAMILY.wisdom.cast },
+    { key = "kings",     label = "Blessing of Kings",     class = "PALADIN", icon = 20217,
+      ids = FAMILY.kings.ids, cast = FAMILY.kings.cast },
+    { key = "salvation", label = "Blessing of Salvation", class = "PALADIN", icon = 1038,
+      ids = FAMILY.salvation.ids, cast = FAMILY.salvation.cast },
+    { key = "light",     label = "Blessing of Light",     class = "PALADIN", icon = 19977,
+      ids = FAMILY.light.ids, cast = FAMILY.light.cast },
+}
+C.BUFF_DEFAULT = { fort = true, spirit = true, shadowprot = false, intellect = true, mark = true, thorns = true,
+                   shout = true, blessing = true, might = true, wisdom = true, kings = true, salvation = true,
+                   light = true }
+
+-- The client's name of a spell (localized), nil when it can't tell.
+function C.SpellName(id)
+    if _G.C_Spell and C_Spell.GetSpellName then return C_Spell.GetSpellName(id) end
+    if N.Compat and N.Compat.Spell and N.Compat.Spell.GetSpellName then return N.Compat.Spell.GetSpellName(id) end
+    if _G.GetSpellInfo then return (GetSpellInfo(id)) end
+end
 C.ACTIONS = {
     { spell = 17534, anim = "sweep", color = { 1.00, 0.10, 0.10 } }, -- Major Healing Potion
     { spell = 17531, anim = "sweep", color = { 0.20, 0.50, 1.00 } }, -- Major Mana Potion

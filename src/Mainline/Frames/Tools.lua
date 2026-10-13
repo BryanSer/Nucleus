@@ -4,14 +4,9 @@ local M = N.Media
 local L = N.L
 local IsSecret = N.IsSecret
 
--- Utilities: three small free-standing displays, each with its own movable frame and settings
--- (N.db.tools.*):
---   readyPull  a Ready Check button and a Pull Timer button
---   battleRes  the raid's battle-res charges and recharge timer
---   marks      a bar of target markers and/or world markers
---
--- They can be dragged while "Move tools" is on (Options > Utilities) and are always shown then, so
--- they can be placed without being in a raid.
+-- Utilities: three free-standing, movable displays with their own settings (N.db.tools.*): readyPull (Ready Check
+-- + Pull Timer), battleRes (charges and recharge timer), marks (target / world marker bar). Draggable, and always
+-- shown, while "Move tools" is on.
 
 local T = {}
 N.Tools = T
@@ -40,9 +35,7 @@ local function setVisible(host, on)
     host:SetAlpha(on and 1 or 0)
 end
 
---------------------------------------------------------------------------------
 -- host frames: position + drag handle
---------------------------------------------------------------------------------
 
 local hosts = {}
 
@@ -97,9 +90,7 @@ local function makeHost(key, title)
     return host
 end
 
---------------------------------------------------------------------------------
 -- Ready Check + Pull Timer
---------------------------------------------------------------------------------
 
 local rp
 local pullEnd, pullTotal
@@ -224,9 +215,7 @@ local function onCountdown(_, total)
     if rp then rp.pull.bar:Show() end
 end
 
---------------------------------------------------------------------------------
 -- Battle Res
---------------------------------------------------------------------------------
 
 local br
 local BR_SPELL = 20484 -- Rebirth: its charge pool is the raid's shared one
@@ -324,9 +313,7 @@ function T.UpdateBattleRes()
     end
 end
 
---------------------------------------------------------------------------------
 -- Marks bar
---------------------------------------------------------------------------------
 
 local mk
 -- World marker button j shows the matching raid-target icon.
@@ -352,18 +339,18 @@ local function buildMarks()
         return b
     end
 
+    -- Markers go through the game's /tm command on a secure button (addons may not call SetRaidTarget); updateMarks
+    -- keeps the command current, a second click clears a mark already set.
     for i = 1, 9 do
-        local b = newButton(false)
+        local b = newButton(true)
+        b:RegisterForClicks("AnyUp")
+        b:SetAttribute("type", "macro")
         if i == 9 then
             b.icon:SetTexture("Interface\\Buttons\\UI-GroupLoot-Pass-Up")
-            b:SetScript("OnClick", function() SetRaidTarget("target", 0) end)
+            b:SetAttribute("macrotext", "/tm 0")
         else
             setIcon(b.icon, i)
-            b:SetScript("OnClick", function()
-                if not UnitExists("target") then return end
-                if GetRaidTargetIndex("target") == i then SetRaidTarget("target", 0)
-                else SetRaidTarget("target", i) end
-            end)
+            b:SetAttribute("macrotext", "/tm " .. i)
         end
         mk.target[i] = b
     end
@@ -424,11 +411,15 @@ local function updateMarks()
     mk.handle:SetShown(c.enabled and unlocked() and true or false)
     local has = UnitExists("target") and true or false
     for _, b in ipairs(mk.target) do b:SetAlpha(has and 1 or 0.45) end
+    if not InCombatLockdown() then
+        local current = has and GetRaidTargetIndex("target") or nil
+        for i = 1, 8 do
+            mk.target[i]:SetAttribute("macrotext", (current == i) and "/tm 0" or ("/tm " .. i))
+        end
+    end
 end
 
---------------------------------------------------------------------------------
 -- wiring
---------------------------------------------------------------------------------
 
 function T.Refresh()
     if not N.db or not N.db.tools then return end

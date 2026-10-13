@@ -1,25 +1,12 @@
 local _, ns = ...
 local N = ns.N
 
--- Retail-only: pulses a Nucleus frame when a groupmate pings that unit.
---
--- MIRROR, NOT LISTENER. The events behind Blizzard's own ping icon (UNIT_PING_PIN_ADDED /
--- UNIT_PING_PIN_REMOVED) are protected: RegisterEvent on them from an addon is
--- ADDON_ACTION_FORBIDDEN, and the icon's template/mixin live in a forbidden scope, so we can
--- neither listen for the ping nor build Blizzard's icon ourselves.
---
--- What is reachable: Blizzard builds a ping-icon child frame (`.pingIconFrame`) into every compact
--- unit frame, and its ShowPing/ClearPing methods are ordinary functions: hooksecurefunc on them
--- fires with the ping's texture kit. Blizzard resolves the protected event to a unit internally;
--- we read the icon owner's `.unit` (a plain field) and mirror onto whichever Nucleus button shows
--- that unit.
---
--- Depends on two things:
---   * Blizzard's hidden compact frames must keep receiving events, so HideBlizzard.lua skips its
---     event stripping while Ping is on (hiding via alpha/mouse still applies). Turning Ping on
---     after events were stripped needs a /reload.
---   * The "showPingsOnRaidFrames" CVar must be on, otherwise Blizzard's handler returns before
---     ShowPing runs. EnsurePingCVar turns it on.
+-- Retail only: pulses a Nucleus frame when a groupmate pings that unit. Blizzard's ping events are protected
+-- (RegisterEvent is ADDON_ACTION_FORBIDDEN) and its icon template lives in a forbidden scope, so we mirror
+-- instead of listening: Blizzard builds a ping icon (`.pingIconFrame`) into every compact unit frame, a
+-- hooksecurefunc on its ShowPing / ClearPing gives the texture kit, and the icon owner's `.unit` says which
+-- Nucleus button to pulse. Needs the hidden compact frames to keep their events (HideBlizzard skips stripping
+-- while Ping is on; turning it on afterwards needs a /reload) and the showPingsOnRaidFrames CVar (EnsurePingCVar).
 
 local Ping = {}
 N.Ping = Ping
@@ -29,9 +16,7 @@ local SAFETY_EXPIRE = 20 -- seconds; covers a missed ClearPing if a frame is rec
 local activePings = {}   -- guid -> texture kit
 local expireTokens = {}  -- guid -> generation, to invalidate a stale safety timer
 
---------------------------------------------------------------------------------
 -- The real Blizzard ping icon on a Nucleus button
---------------------------------------------------------------------------------
 
 -- Blizzard's own ping art, referenced by atlas name (built into the client). "kit" is the ping
 -- type Blizzard hands back: Attack, Warning, OnMyWay, ...
@@ -125,9 +110,7 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
     end
 end)
 
---------------------------------------------------------------------------------
 -- GUID plumbing
---------------------------------------------------------------------------------
 
 local function safeGUID(unit)
     if not unit then return nil end
@@ -136,9 +119,7 @@ local function safeGUID(unit)
     return guid
 end
 
---------------------------------------------------------------------------------
 -- Hooking Blizzard's own (hidden) ping icons
---------------------------------------------------------------------------------
 
 local DEBUG = false
 

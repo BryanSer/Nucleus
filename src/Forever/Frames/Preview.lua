@@ -4,13 +4,8 @@ local M = N.Media
 local L = N.L
 local UF = N.UnitFrame
 
--- Inline per-indicator preview: a small mock unit frame right above each indicator's settings card
--- (BuildIndicator/BuildAuras in OptionsFrame.lua call N.Preview.Create and add it as the first
--- card). It renders through the same visual layer as the real frames (UF.CreateVisual /
--- UF.LayoutBars / UF.ApplyMock), masked down to the indicator being edited (button._previewOnly,
--- honored by UnitFrame.render / Indicators / Auras) unless General > Preview Settings > "Show all
--- enabled indicators" is on.
---
+-- Inline per-indicator preview: a mock unit frame above each indicator's settings, drawn through the same visual
+-- layer as the real frames and masked to the indicator being edited (unless "Show all enabled" is on).
 
 local P = {}
 N.Preview = P

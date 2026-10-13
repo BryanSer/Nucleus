@@ -1,22 +1,16 @@
 local _, ns = ...
 local N = ns.N
 
--- Modifier+click -> spell/item/macro straight from a unit frame. Secure attributes only, written
--- out of combat via N.RunWhenSafe.
---
--- The header's initialConfigFunction sets the wildcards *type1 ("target") and *type2
--- ("togglemenu"). Click-casting sets the modifier-prefixed ones (shift-type1, ...), which only
--- override the combos that have a binding; every other click keeps the default.
+-- Click-casting: modifier+click -> spell / item / macro on a unit frame, via secure attributes written out of
+-- combat. The header's *type1 / *type2 wildcards stay for unbound clicks.
 
 local CC = {}
 N.ClickCasting = CC
 
 local BUTTON_INDEX = { LeftButton = 1, RightButton = 2, MiddleButton = 3, Button4 = 4, Button5 = 5 }
 
--- The wheel and the keyboard have no button number: while the mouse is over a frame, an override
--- binding turns the wheel or key (with its modifiers) into a click named e.g. "ctrlSCROLLUP" or
--- "altQ", and the attributes are keyed by that name ("type-altQ"). The modifier is part of the
--- name, not of the attribute prefix. A key binding is stored as button = "KEY:Q".
+-- Wheel and keys have no button number: while the mouse is over a frame an override binding turns them into a
+-- named click ("ctrlSCROLLUP", "altQ"); a key binding is stored as button = "KEY:Q".
 local WHEEL = { ScrollUp = "SCROLLUP", ScrollDown = "SCROLLDOWN" }
 local WHEEL_KEY = { ScrollUp = "MOUSEWHEELUP", ScrollDown = "MOUSEWHEELDOWN" }
 
@@ -35,10 +29,7 @@ local function hoverName(button)
     return WHEEL[button] or keyOf(button)
 end
 
--- Modifier combos are stored in Blizzard's attribute order, "alt-", then "ctrl-", then "shift-",
--- because SecureButton_GetModifierPrefix builds the prefix in exactly that order; a binding
--- written "shift-ctrl-" would never match. Older saves used other orders, so everything goes
--- through NormalizeModifier first.
+-- Modifiers are stored in Blizzard's attribute order (alt-, ctrl-, shift-); NormalizeModifier converts older saves.
 local ALL_MODS = {
     "none", "alt", "ctrl", "shift", "alt-ctrl", "alt-shift", "ctrl-shift", "alt-ctrl-shift",
 }
@@ -99,10 +90,8 @@ function CC.BindingText(binding)
     return table.concat(parts, " + ")
 end
 
--- Returns the four attribute name/value pairs a binding needs, or nil for an empty/invalid one. A
--- macro value starting with "/" or "#" is macro TEXT (older saves); anything else is the NAME of
--- one of the player's macros, run through the secure "macro" attribute. Kinds without a value: the
--- secure action type alone is the whole binding.
+-- The attribute name/value pairs a binding needs, or nil. Macro text starts with "/" or "#", anything else
+-- is a macro name.
 local PLAIN_ACTIONS = { target = "target", focus = "focus", menu = "togglemenu", assist = "assist" }
 
 local function attrPairs(binding)
@@ -116,15 +105,24 @@ local function attrPairs(binding)
     if not idx then return nil end
     local typeAttr = prefix .. "type" .. idx
 
-    -- "general" keeps the action in value; the bare kinds are what an earlier build of the options
-    -- window saved.
+    -- "general" keeps the action in value; the bare kinds are older saves.
     local plain = (binding.kind == "general") and PLAIN_ACTIONS[binding.value]
         or PLAIN_ACTIONS[binding.kind]
     if plain then return typeAttr, plain end
+    -- Trinket 1 / 2 follow the equipment slot; a macro, so they also work in combat.
+    if binding.kind == "trinket1" or binding.kind == "trinket2" then
+        local slot = (binding.kind == "trinket1") and 13 or 14
+        return typeAttr, "macro", prefix .. "macrotext" .. idx, "/use [@mouseover,exists,nodead] " .. slot
+    end
     if not binding.value or binding.value == "" then return nil end
     if binding.kind == "spell" then
         return typeAttr, "spell", prefix .. "spell" .. idx, binding.value
     elseif binding.kind == "item" then
+        -- Equipped item by slot ("slot:13"): a macro, so it follows swaps and works in combat.
+        local slot = tostring(binding.value):match("^slot:(%d+)$")
+        if slot then
+            return typeAttr, "macro", prefix .. "macrotext" .. idx, "/use [@mouseover,exists,nodead] " .. slot
+        end
         return typeAttr, "item", prefix .. "item" .. idx, binding.value
     elseif binding.kind == "macro" then
         local v = binding.value
@@ -141,10 +139,8 @@ local function attrPairs(binding)
     return nil
 end
 
--- Blizzard's click-binding gate: "target" with a modifier or on any button but plain left click,
--- and "togglemenu" on every button, only work through a secure action button of their own. A frame
--- with type="click" forwards the click to such a proxy (clickbutton attribute), which runs the
--- real action.
+-- Blizzard's gate: "target" with a modifier or off plain left click, and "togglemenu", only work through a
+-- secure proxy button, reached with type="click".
 local proxyOf = setmetatable({}, { __mode = "k" }) -- kept off the secure frame
 local function clickProxy(button)
     local have = proxyOf[button]
@@ -283,9 +279,7 @@ function CC.Apply(button, bindings)
     if not menuOnRight then setPlainAction(button, "type2", "togglemenu") end
 end
 
--- Bindings are per class. clickCasting.bindings always points at the list of the class being
--- played (so the rest of the code and the options page work on it); the others live in
--- clickCasting.byClass.
+-- Bindings are per class: clickCasting.bindings is the played class's list, the others live in byClass.
 local function knownSpell(value)
     if value == nil or value == "" then return false end
     -- Forever: "Name(Rank N)" - look the spell up by its name.
@@ -299,8 +293,7 @@ function CC.SelectClass()
     local _, class = UnitClass("player")
     if not (cc and cc.byClass and class and cc.byClass[class]) then return end
     if not cc.migrated then
-        -- Older saves had one shared list: every class starts from it, and the current class drops
-        -- the spells it doesn't know.
+        -- Older saves had one shared list: each class starts from it and drops the spells it doesn't know.
         for c in pairs(cc.byClass) do cc.byClass[c] = N.DeepCopy(cc.bindings) end
         local mine = cc.byClass[class]
         for i = #mine, 1, -1 do

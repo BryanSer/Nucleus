@@ -4,16 +4,10 @@ local M = N.Media
 local L = N.L
 local IsSecret = N.IsSecret
 
--- Targeted Spell Bars
---
--- One floating, movable stack of cast bars: one bar per enemy nameplate that is casting. It
--- doesn't try to work out WHICH of our frames a cast is aimed at (unreliable under Secret Values).
--- The bar reads the target through the secret-safe Blizzard APIs built for it
--- (UnitShouldDisplaySpellTargetName / UnitSpellTargetName / UnitSpellTargetClass) and only hands
--- the possibly secret result straight to SetText / SetTextColor.
---
--- Not tied to a unit frame, so it isn't an Indicators.Register entry: it owns one shared
--- container, its own settings (N.db.targetedSpellBars) and its own options page under Indicators.
+-- Targeted Spell Bars: one floating, movable stack of cast bars, one per casting enemy nameplate. It doesn't work
+-- out which of our frames a cast is aimed at (unreliable with secret values); the target is read through the
+-- secret-safe Blizzard APIs and handed straight to SetText / SetTextColor. Own container, settings
+-- (N.db.targetedSpellBars) and options page, so not an Indicators.Register entry.
 
 local TSB = {}
 N.TargetedSpellBars = TSB
@@ -40,9 +34,7 @@ local DIR_REMAINING = Enum_ and Enum_.StatusBarTimerDirection and Enum_.StatusBa
 
 local PREVIEW = "__preview"
 
---------------------------------------------------------------------------------
 -- config
---------------------------------------------------------------------------------
 
 local function GetConfig()
     return N.db and N.db.targetedSpellBars
@@ -62,9 +54,7 @@ local function WhereAllows(cfg)
     return true -- "both": raid, party, or solo
 end
 
---------------------------------------------------------------------------------
 -- state
---------------------------------------------------------------------------------
 
 local container
 local bars = {}
@@ -79,9 +69,7 @@ local function barSize(cfg)
     return cfg.width or 220, cfg.height or 22
 end
 
---------------------------------------------------------------------------------
 -- container + mover
---------------------------------------------------------------------------------
 
 local function SavePosition()
     local cfg = GetConfig()
@@ -154,9 +142,7 @@ local function SyncMover()
     if not want and not active and not previewOn then container:Hide() end
 end
 
---------------------------------------------------------------------------------
 -- bar pool
---------------------------------------------------------------------------------
 
 local function BuildBar()
     local c = EnsureContainer()
@@ -170,10 +156,8 @@ local function BuildBar()
     holder.icon:SetPoint("BOTTOMRIGHT", -2, 2)
     holder.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
 
-    -- No BackdropTemplate anywhere in this bar's frame subtree (neither on the StatusBar nor as
-    -- its parent): a StatusBar driven by :SetTimerDuration() with a secret-tainted duration object
-    -- crashes Backdrop.lua's corner redraw if any BackdropTemplate frame is in the same chain. The
-    -- rounded plate and rim are plain textures (SkinRound), never SetBackdrop.
+    -- No BackdropTemplate in this bar's subtree: a StatusBar driven by :SetTimerDuration() with a secret duration
+    -- object crashes Backdrop.lua's corner redraw. Plate and rim are plain textures (SkinRound).
     holder.barFrame = CreateFrame("Frame", nil, holder)
     N.SkinRound(holder.barFrame, M.color.segment, M.color.line, true)
 
@@ -214,9 +198,7 @@ local function AcquireBar()
     return b
 end
 
---------------------------------------------------------------------------------
 -- style / layout
---------------------------------------------------------------------------------
 
 local function StyleBar(holder, cfg)
     local w, h = barSize(cfg)
@@ -235,9 +217,8 @@ local function StyleBar(holder, cfg)
         holder.barFrame:SetAllPoints(holder)
     end
 
-    -- The base color stays neutral white; the visible color (normal vs important) is applied per
-    -- cast through the fill texture's vertex color, because "important" can be a secret boolean
-    -- that only a native color-from-boolean sink can act on safely.
+    -- The base color stays white; normal vs important is applied per cast through the fill's vertex color, since
+    -- "important" can be a secret boolean that only a native sink may act on.
     holder.bar:SetStatusBarColor(1, 1, 1, 1)
 
     holder.name:ClearAllPoints()
@@ -279,13 +260,9 @@ local function Reflow(cfg)
     end
 end
 
---------------------------------------------------------------------------------
 -- important-cast colour marking
---------------------------------------------------------------------------------
 
--- `important` can be a secret boolean (spellId is normally secret for an enemy nameplate cast), so
--- it must never be truth-tested. The color goes through the native color-from-boolean sink built
--- to accept one.
+-- `important` can be a secret boolean: never truth-test it, hand it to the color sink.
 local function ApplyImportantVisual(holder, cfg, important)
     local normal = cfg.color or { 0.62, 0.42, 0.95 }
     local imp = cfg.importantColor or { 1.00, 0.80, 0.20 }
@@ -302,9 +279,7 @@ local function ApplyImportantVisual(holder, cfg, important)
     end
 end
 
---------------------------------------------------------------------------------
 -- release
---------------------------------------------------------------------------------
 
 local function Release(unit, cfg)
     castGen[unit] = (castGen[unit] or 0) + 1 -- invalidates any deferred ApplyCast still pending
@@ -342,9 +317,7 @@ local function SortShown()
     table.sort(shown, function(a, b) return a.startTime < b.startTime end)
 end
 
---------------------------------------------------------------------------------
 -- per-cast tick
---------------------------------------------------------------------------------
 
 -- Only the synthetic preview entry computes a fraction by hand (fake times, so plain math is
 -- safe). Real casts are driven natively by :SetTimerDuration() in ApplyCast.
@@ -364,10 +337,8 @@ local function BarOnUpdate(holder)
         return
     end
 
-    -- Only the countdown text is refreshed here, through the duration object's own accessor, never
-    -- a raw secret start/end time. GetRemainingDuration() can itself be secret, but
-    -- SetFormattedText is a secret-safe sink; branching on it is not, so there is exactly one
-    -- fixed format.
+    -- Only the countdown text is refreshed here, via the duration object's accessor: GetRemainingDuration() can be
+    -- secret and SetFormattedText is a safe sink, so there is one fixed format.
     local remaining
     if e.duration and e.duration.GetRemainingDuration then
         remaining = e.duration:GetRemainingDuration()
@@ -389,9 +360,7 @@ local function PaintTarget(holder, unit, cfg)
         if type(targetName) ~= "nil" then
             holder.target:SetText(targetName)
 
-            -- UnitSpellTargetClass is the secret-safe counterpart for the target's class token,
-            -- and C_ClassColor.GetClassColor() is a safe sink for it (the color object is never
-            -- secret).
+            -- UnitSpellTargetClass is the secret-safe class token; C_ClassColor.GetClassColor() is a safe sink for it.
             local color
             if UnitSpellTargetClass and C_ClassColor and C_ClassColor.GetClassColor then
                 color = C_ClassColor.GetClassColor(UnitSpellTargetClass(unit))
@@ -407,9 +376,8 @@ local function PaintTarget(holder, unit, cfg)
     holder.target:SetText("")
 end
 
--- spellId is normally secret for an enemy nameplate cast; IsSpellImportant still accepts a secret
--- spellId (only inspecting its result is restricted), so the raw return is passed on and fed
--- straight into the color sink.
+-- spellId is secret for enemy nameplate casts; IsSpellImportant accepts it, so the raw return goes straight into
+-- the color sink.
 local function ClassifyCast(spellId)
     local important
     if spellId ~= nil and C_Spell and C_Spell.IsSpellImportant then
@@ -419,15 +387,10 @@ local function ClassifyCast(spellId)
     return important
 end
 
--- cast lifecycle
---
--- Never do Lua arithmetic on UnitCastingInfo/UnitChannelInfo start/end times: on an enemy
--- nameplate they can be secret. Progress comes from UnitCastingDuration / UnitChannelDuration /
--- UnitEmpoweredChannelDuration, an opaque duration object handed to the StatusBar's native
--- :SetTimerDuration(). Name and icon are fetched at render time through C_Spell.GetSpellName /
--- GetSpellTexture and passed straight to SetText / SetTexture, which accept secret values.
--- CreateFrame (AcquireBar) and SetSize (StyleBar) are deferred a tick with C_Timer.After so they
--- never run in the same execution as those reads.
+-- Cast lifecycle. Never do arithmetic on UnitCastingInfo / UnitChannelInfo times (secret on enemy nameplates):
+-- progress comes from UnitCastingDuration / UnitChannelDuration / UnitEmpoweredChannelDuration through the
+-- StatusBar's :SetTimerDuration(). Name and icon go straight to SetText / SetTexture. CreateFrame and SetSize are
+-- deferred a tick so they never run in the same execution as those reads.
 
 local function ResolveDuration(unit)
     local duration, isEmpowered
@@ -461,8 +424,7 @@ local function ApplyCast(unit, cfg, myGen, isChannel, isEmpowered, important, du
     e.duration = duration
 
     StyleBar(e.bar, cfg)
-    -- spellId ~= nil, never `spellId and ...`: it can be a secret number, and a
-    -- truthiness test on one is exactly what the secret-value system blocks.
+    -- `spellId ~= nil`, never `spellId and ...`: a truthiness test on a secret number is blocked.
     if cfg.showIcon ~= false and spellId ~= nil and C_Spell and C_Spell.GetSpellTexture then
         e.bar.icon:SetTexture(C_Spell.GetSpellTexture(spellId))
     end
@@ -505,10 +467,8 @@ local function StartCast(unit, cfg, eventSpellId)
         if castGen[unit] ~= myGen then return end
         if not (active and cfg) then return end
 
-        -- type(x) == "nil", never `x ~= nil`: these can return a secret string and even a nil
-        -- comparison on one is a disallowed equality compare. The extra parens force exactly one
-        -- value: an inactive unit's UnitCastingInfo can return ZERO values, and type() with no
-        -- argument is an error.
+        -- type(x) == "nil", never `x ~= nil`: these can return a secret string. The extra parens force one value; an
+        -- inactive unit's UnitCastingInfo can return none, and type() with no argument errors.
         local isChannel, exists
         if type((UnitCastingInfo(unit))) ~= "nil" then
             isChannel, exists = false, true
@@ -534,8 +494,7 @@ local function StartCast(unit, cfg, eventSpellId)
         local important = ClassifyCast(spellId)
         local duration, isEmpowered = ResolveDuration(unit)
 
-        -- ApplyCast does the actual frame work; it runs on its own clean tick,
-        -- never in the execution that just read the cast info above.
+        -- ApplyCast does the frame work on its own tick, never in the execution that read the cast info.
         C_Timer.After(0, function()
             if castGen[unit] ~= myGen then return end
             ApplyCast(unit, cfg, myGen, isChannel, isEmpowered, important, duration, spellId)
@@ -543,9 +502,7 @@ local function StartCast(unit, cfg, eventSpellId)
     end)
 end
 
---------------------------------------------------------------------------------
 -- events
---------------------------------------------------------------------------------
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:Hide()
@@ -685,9 +642,7 @@ local function SyncActive()
     SyncMover()
 end
 
---------------------------------------------------------------------------------
 -- settings entry points
---------------------------------------------------------------------------------
 
 function TSB.Refresh()
     SyncActive()
@@ -756,9 +711,7 @@ end
 
 function TSB.IsPreviewing() return previewOn end
 
---------------------------------------------------------------------------------
 -- wiring
---------------------------------------------------------------------------------
 
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("GROUP_ROSTER_UPDATE")

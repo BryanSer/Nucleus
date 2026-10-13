@@ -5,15 +5,10 @@ local L = N.L
 
 local function uc(c) return c[1], c[2], c[3], c[4] or 1 end
 
--- Nucleus' own message dialog in the options window's look. Replaces the game's StaticPopup for
--- every question or notice (reload, delete confirmations, name prompts, the copy-link box). One
--- dialog is up at a time, the next waits in a queue.
---
---   N.Dialog.Show{ title, text, input = { text, maxLetters, readOnly },
---                  buttons = { { text, onClick(inputText), primary }, ... } }
---   N.Dialog.Confirm(text, onYes [, { title, yes, no }])
---   N.Dialog.Prompt(text, default, onAccept(text))
---   N.Dialog.Reload(text)
+-- Nucleus' own message dialog in the options window's look, replacing StaticPopup for questions and notices.
+-- One dialog at a time, the next waits in a queue.
+--   N.Dialog.Show{ title, text, input = { text, maxLetters, readOnly }, buttons = { { text, onClick, primary } } }
+--   N.Dialog.Confirm(text, onYes [, { title, yes, no }]), .Prompt(text, default, onAccept(text)), .Reload(text)
 
 local D = {}
 N.Dialog = D

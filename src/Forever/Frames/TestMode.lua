@@ -12,8 +12,7 @@ local active = false
 local containers = {}   -- key -> Frame
 local pools = {}        -- key -> { buttons }
 
--- Forever characters have a surname, so the sample frames show "First Surname" and the
--- Name indicator's format (full / first / last) can be tried.
+-- Sample names have a surname so the Name indicator's format (full / first / last) can be tried.
 local NAMES = {
     "Ashvane Stormrider", "Brill Oakheart", "Cindra Ashfall", "Dorn Ironbrow", "Eyala Moonwhisper",
     "Fenn Brightwater", "Gwyn Duskwood", "Harlow Stonefist", "Isolde Frostmere", "Joro Blackthorn",
@@ -145,18 +144,46 @@ local function count(key)
     return math.min(cfg.maxColumns, 8) * cfg.unitsPerColumn
 end
 
-local function place(container, key, pool, n)
+-- Rows, columns and the size of the whole block (what the real header would measure).
+local function blockLayout(key, n)
     local cfg = N.db[key]
     local w, h, sp = cfg.width, cfg.height, cfg.spacing
     local colSp = cfg.columnSpacing or sp
     local horizontal = cfg.orientation == "horizontal"
-    local rev = cfg.reverse
     local perCol = (key == "raid") and (cfg.groupBy == "GROUP" and 5 or cfg.unitsPerColumn) or n
+    perCol = math.max(1, perCol)
+    local cols = math.max(1, math.ceil(n / perCol))
+    local rows = math.max(1, math.min(n, perCol))
+    local totalW, totalH
+    if horizontal then
+        totalW, totalH = rows * w + (rows - 1) * sp, cols * h + (cols - 1) * colSp
+    else
+        totalW, totalH = cols * w + (cols - 1) * colSp, rows * h + (rows - 1) * sp
+    end
+    return perCol, horizontal, totalW, totalH, colSp
+end
+
+-- Size of the preview block of a group (the Position settings use it to keep frames in place
+-- while the anchor point changes).
+function TM.BlockSize(key)
+    if not (N.db and N.db[key]) then return 0, 0 end
+    local _, _, w, h = blockLayout(key, count(key))
+    return w, h
+end
+
+local function place(container, key, pool, n)
+    local cfg = N.db[key]
+    local w, h, sp = cfg.width, cfg.height, cfg.spacing
+    local perCol, horizontal, totalW, totalH, colSp = blockLayout(key, n)
+    local rev = cfg.reverse
 
     local anchor = "TOPLEFT"
     if rev then anchor = horizontal and "TOPRIGHT" or "BOTTOMLEFT" end
     local sx = anchor:find("RIGHT") and -1 or 1
     local sy = anchor:find("BOTTOM") and 1 or -1
+
+    -- the container is the whole block, so the anchor point of the group behaves like the real one
+    container:SetSize(totalW, totalH)
 
     for i = 1, n do
         local b = pool[i]
@@ -200,10 +227,12 @@ local function makeHandle(container, key)
         if not a._moving then return end
         a._moving = nil
         container:StopMovingOrSizing()
-        local x = N.Round(container:GetLeft())
-        local y = N.Round(container:GetTop() - UIParent:GetHeight())
-        N:Set(key .. ".x", x)
-        N:Set(key .. ".y", y)
+        local point = N.db[key].point
+        local mx, my = N.PointXY(container, point)
+        local ux, uy = N.PointXY(UIParent, point)
+        N:Set(key .. ".x", N.Round(mx - ux))
+        N:Set(key .. ".y", N.Round(my - uy))
+        N:Fire("NUCLEUS_FRAME_MOVED", key)
     end)
     container.handle = a
 end
@@ -217,32 +246,55 @@ local function syncHandles()
     end
 end
 
--- The mock players in the order the custom sorting (Appearance > Layout > Sorting) would put them:
--- pinned names first, then by role. Slot i shows mock player order[i].
+-- Mock players in the order the real header would use (custom sorting with pins, else Group by / Sort);
+-- slot i shows order[i].
+local ROLE_RANK = { TANK = 1, HEALER = 2, DAMAGER = 3 }
 local function testOrder(key, n)
     local order = {}
     for i = 1, n do order[i] = i end
-    local o = N.db[key] and N.db[key].ordering
-    if not (o and o.enabled) then return order end
-    local rank = { [o.first or "TANK"] = 1, [o.second or "HEALER"] = 2, [o.third or "DAMAGER"] = 3 }
+    local cfg = N.db[key]
+    if not cfg then return order end
+    local isRaid = key == "raid"
+    local o = cfg.ordering
+    local custom = o and o.enabled
+    local rank = ROLE_RANK
     local pins = {}
-    for tok in (o.pinned or ""):gmatch("[^,;\n]+") do
-        tok = strtrim(tok):lower()
-        if tok ~= "" then pins[#pins + 1] = tok end
+    if custom then
+        rank = { [o.first or "TANK"] = 1, [o.second or "HEALER"] = 2, [o.third or "DAMAGER"] = 3 }
+        for tok in (o.pinned or ""):gmatch("[^,;\n]+") do
+            tok = strtrim(tok):lower()
+            if tok ~= "" then pins[#pins + 1] = tok end
+        end
     end
+    local function nameOf(i) return NAMES[(i - 1) % #NAMES + 1]:lower() end
+    local function classOf(i) return CLASSES[(i - 1) % #CLASSES + 1] end
     local function pinIndex(i)
-        local name = NAMES[(i - 1) % #NAMES + 1]:lower()
+        local name = nameOf(i)
         for k, pin in ipairs(pins) do
             if pin == name then return k end
         end
         return 1000
     end
-    local function rankOf(i) return rank[roleOf(i, key)] or 4 end
+    local groupBy = isRaid and cfg.groupBy or nil
+    local byName = isRaid and cfg.sortMethod == "NAME" and #pins == 0
+    local function primary(i)
+        if custom then return rank[roleOf(i, key)] or 4 end
+        if groupBy == "GROUP" then return math.floor((i - 1) / 5) end
+        if groupBy == "CLASS" then return classOf(i) end
+        if groupBy == "ROLE" then return ROLE_RANK[roleOf(i, key)] or 4 end
+        return 0
+    end
     table.sort(order, function(a, b)
-        local pa, pb = pinIndex(a), pinIndex(b)
-        if pa ~= pb then return pa < pb end
-        local ra, rb = rankOf(a), rankOf(b)
+        if #pins > 0 then
+            local pa, pb = pinIndex(a), pinIndex(b)
+            if pa ~= pb then return pa < pb end
+        end
+        local ra, rb = primary(a), primary(b)
         if ra ~= rb then return ra < rb end
+        if byName then
+            local na, nb = nameOf(a), nameOf(b)
+            if na ~= nb then return na < nb end
+        end
         return a < b
     end)
     return order
@@ -300,11 +352,10 @@ local function buildKey(key, force)
             if pool[i]:IsShown() then UF.ApplyMock(pool[i], pool[i]._mock) end
         end
     end)
+    return true
 end
 
--- Only the group type being edited is previewed, so it follows the Group / Raid switch.
--- Pets bound to their owner sit next to the matching mock party frames (the Hunter is frame 3) so
--- the placement can be tuned.
+-- Pets bound to their owner sit next to the matching mock group frames (the Hunter is frame 3).
 local function attachPreview(key)
     local c = containers[key]
     local pool, owners = pools[key], pools.party
@@ -322,24 +373,50 @@ local function attachPreview(key)
     end
 end
 
+local NPC_SIDES = {
+    RIGHT = { "TOPLEFT", "TOPRIGHT" }, LEFT = { "TOPRIGHT", "TOPLEFT" },
+    TOP = { "BOTTOMLEFT", "TOPLEFT" }, BOTTOM = { "TOPLEFT", "BOTTOMLEFT" },
+}
+local SECTION_KEYS = { "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }
 local function rebuild()
     if not active then return end
-    local shown = N:Mode()
-    for _, key in ipairs({ "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }) do
-        if key == shown then
+    local edited = N:Mode()
+    local extra = N.db.testSections or {}
+    for _, key in ipairs(SECTION_KEYS) do
+        if key == edited or extra[key] == true then
             local attached = (key == "ownPet" or key == "groupPets") and N.db[key].attachEnabled
             if attached then
                 buildKey("party", true)
                 if containers.party then containers.party:Show() end
             end
-            buildKey(key)
-            if containers[key] then containers[key].attachPreview = attached and true or false end
-            if attached then attachPreview(key) end
-            syncHandles()
+            -- The NPC frames hang on the group frames (the raid frames while the raid is edited).
+            local hostKey = (key == "npc" and N.db.npc.attachEnabled) and (edited == "raid" and "raid" or "party") or nil
+            if hostKey then
+                buildKey(hostKey, true)
+                if containers[hostKey] then containers[hostKey]:Show() end
+            end
+            local built = buildKey(key)
+            if containers[key] then
+                containers[key].attachPreview = (attached or hostKey) and true or false
+                if not built then containers[key]:Hide() end
+            end
+            if attached and built then attachPreview(key) end
+            if hostKey and built and containers[hostKey] then
+                local cfg = N.db.npc
+                local s = NPC_SIDES[cfg.attachSide] or NPC_SIDES.RIGHT
+                local gap, shift = cfg.attachGap or 2, cfg.attachShift or 0
+                local x, y = gap, shift
+                if cfg.attachSide == "LEFT" then x, y = -gap, shift
+                elseif cfg.attachSide == "TOP" then x, y = shift, gap
+                elseif cfg.attachSide == "BOTTOM" then x, y = shift, -gap end
+                containers[key]:ClearAllPoints()
+                containers[key]:SetPoint(s[1], containers[hostKey], s[2], x, y)
+            end
         elseif containers[key] then
             containers[key]:Hide()
         end
     end
+    syncHandles()
 end
 TM.Rebuild = rebuild
 
@@ -368,7 +445,7 @@ function TM.IsActive() return active end
 
 function TM.Init()
     N:On("NUCLEUS_SETTING_CHANGED", function(_, section)
-        if active and N.GROUP_KEYS[section] then
+        if active and (N.GROUP_KEYS[section] or section == "testSections") then
             rebuild()
         end
     end)

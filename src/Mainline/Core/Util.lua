@@ -76,8 +76,7 @@ function N.Round(v)
     return floor(v + 0.5)
 end
 
--- v UI units as whole physical pixels at frame's scale. Plain 1-unit insets land on different
--- sub-pixels on opposite sides when the scale is not 1, so use this for every 1px border or inset.
+-- Snaps UI units to whole pixels at the frame's scale, so 1px borders look even on every side.
 function N.Snap(frame, v)
     local PU = _G.PixelUtil
     if PU and PU.GetNearestPixelSize and frame and frame.GetEffectiveScale then

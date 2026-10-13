@@ -2,9 +2,8 @@ local _, ns = ...
 local N = ns.N
 local M = N.Media
 
--- Widget set for the options window. Every control is a full-width row, label left, control right.
--- Cards (MakeCard) own vertical stacking and width. Extend here instead of pulling in a UI
--- library.
+-- Widget set of the options window: every control is a full-width row, label left, control right; cards own
+-- vertical stacking and width.
 
 local function unpackColor(c) return c[1], c[2], c[3], c[4] or 1 end
 
@@ -150,9 +149,7 @@ function N.MakeCard(parent, title)
     return card
 end
 
---------------------------------------------------------------------------------
 -- Controls
---------------------------------------------------------------------------------
 
 function N.MakeColorPicker(parent, label, get, set, desc)
     local f = CreateFrame("Button", nil, parent)
@@ -255,6 +252,7 @@ function N.MakeSlider(parent, label, minV, maxV, step, get, set)
     local lb = N.FontString(f, 12)
     lb:SetPoint("TOPLEFT", 0, -1)
     lb:SetText(label)
+    f.label = lb
 
     local slider = CreateFrame("Slider", nil, f)
     slider:SetPoint("TOPLEFT", 0, -22)
@@ -265,9 +263,7 @@ function N.MakeSlider(parent, label, minV, maxV, step, get, set)
     slider:SetValueStep(step)
     slider:SetObeyStepOnDrag(true)
 
-    -- Capsule bars are a flat body plus half-circle end caps (the circle texture split at its
-    -- middle), so even a 5px bar gets truly round ends; 9-slicing can't shrink corners below its
-    -- margin.
+    -- Capsule bars: a flat body plus half-circle end caps, so even a 5px bar has round ends.
     local BAR_H = 5
     local function capsule(layer, color, rightCap)
         local parts = {}
@@ -978,9 +974,7 @@ function N.MakeScroll(parent, trackX)
     return scroll, child, updateThumb
 end
 
---------------------------------------------------------------------------------
 -- Copy-link popup (the client cannot open external URLs)
---------------------------------------------------------------------------------
 
 function N.ShowLinkPopup(label, url)
     N.Dialog.Link(label, url)

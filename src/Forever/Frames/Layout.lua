@@ -20,16 +20,6 @@ function N.StyleMover(a, label, text, target)
     local scale = ((N.db and N.db.moverSize) or 100) / 100
     local bar = N.db and N.db.moverStyle == "bar"
     a._moverText = text .. ((N.db and N.db.moverMode == "alt") and " [ALT]" or "")
-    if not a._moverTip then
-        a._moverTip = true
-        a:HookScript("OnEnter", function(self)
-            if not (N.db and N.db.moverStyle == "bar") then return end
-            GameTooltip:SetOwner(self, "ANCHOR_TOP")
-            GameTooltip:SetText(self._moverText)
-            GameTooltip:Show()
-        end)
-        a:HookScript("OnLeave", function() GameTooltip:Hide() end)
-    end
     a:ClearAllPoints()
     local ox, oy = (N.db and N.db.moverX) or 0, 2 + ((N.db and N.db.moverY) or 0)
     if bar then
@@ -63,6 +53,13 @@ local function pointXY(f, point)
     local x = point:find("LEFT") and l or point:find("RIGHT") and l + w or l + w / 2
     local y = point:find("BOTTOM") and b or point:find("TOP") and b + h or b + h / 2
     return x, y
+end
+
+N.PointXY = pointXY
+
+-- The test mode draws its own handles over its own frames, the real ones stay hidden meanwhile.
+local function inTestMode()
+    return N.TestMode and N.TestMode.IsActive and N.TestMode.IsActive() or false
 end
 
 local function makeAnchor(key)
@@ -110,6 +107,7 @@ local function makeAnchor(key)
         local ux, uy = pointXY(UIParent, point)
         local x, y = N.Round(mx - ux), N.Round(my - uy)
         N.db[key].x, N.db[key].y = x, y
+        N:Fire("NUCLEUS_FRAME_MOVED", key)
         if m ~= header then
             m:ClearAllPoints()
             m:SetPoint(point, UIParent, point, x, y)
@@ -122,12 +120,12 @@ local function makeAnchor(key)
     end)
 
     N.anchors[key] = a
-    a:SetShown(not N.db.locked and N.MoverWanted(key))
+    a:SetShown(not N.db.locked and not inTestMode() and N.MoverWanted(key))
 end
 N.Layout_MakeAnchor = makeAnchor
 
 function N.RefreshLock()
-    local unlocked = not N.db.locked
+    local unlocked = not N.db.locked and not inTestMode()
     for key, a in pairs(N.anchors) do
         a:SetShown(unlocked and N.MoverWanted(key))
         if a._restyle then a._restyle() end
@@ -155,3 +153,4 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
 end)
 
 N:On("NUCLEUS_EDIT_MODE", function() N.RefreshLock() end)
+N:On("NUCLEUS_TEST_MODE", function() N.RefreshLock() end)

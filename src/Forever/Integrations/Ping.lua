@@ -29,9 +29,7 @@ local SAFETY_EXPIRE = 20 -- seconds; covers a missed ClearPing if a frame is rec
 local activePings = {}   -- guid -> texture kit
 local expireTokens = {}  -- guid -> generation, to invalidate a stale safety timer
 
---------------------------------------------------------------------------------
 -- The real Blizzard ping icon on a Nucleus button
---------------------------------------------------------------------------------
 
 -- Blizzard's own ping art, referenced by atlas name (built into the client). "kit" is the ping
 -- type Blizzard hands back: Attack, Warning, OnMyWay, ...
@@ -146,9 +144,7 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
     end
 end)
 
---------------------------------------------------------------------------------
 -- GUID plumbing
---------------------------------------------------------------------------------
 
 local function safeGUID(unit)
     if not unit then return nil end
@@ -157,9 +153,7 @@ local function safeGUID(unit)
     return guid
 end
 
---------------------------------------------------------------------------------
 -- Hooking Blizzard's own (hidden) ping icons
---------------------------------------------------------------------------------
 
 local DEBUG = false
 

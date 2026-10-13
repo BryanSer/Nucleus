@@ -1,12 +1,9 @@
 local _, ns = ...
 local N = ns.N
 
--- Cell profile import: reads the table of a Cell "Profile" export and builds a Nucleus profile
--- from it. Only values from the user's own export are read (sizes, colors, spell IDs, switches).
--- Whatever has no Nucleus counterpart is skipped and listed in the report.
---
---   CI.Decode(text)   -> ok, data | errorKey
---   CI.Layouts(data)  -> sorted list of layout names
+-- Cell profile import: builds a Nucleus profile from a Cell "Profile" export (sizes, colors, spell IDs,
+-- switches). Whatever has no counterpart is skipped and listed in the report.
+--   CI.Decode(text) -> ok, data | errorKey;   CI.Layouts(data) -> sorted layout names;
 --   CI.Convert(data, partyLayout, raidLayout) -> profile table, report { done, skipped }
 
 local CI = {}
@@ -21,9 +18,7 @@ local GROWTH = {
     ["top-to-bottom"] = "DOWN", ["bottom-to-top"] = "UP",
 }
 
---------------------------------------------------------------------------------
 -- decoding
---------------------------------------------------------------------------------
 
 function CI.Decode(text)
     local LibSerialize = LibStub and LibStub:GetLibrary("LibSerialize", true)
@@ -47,9 +42,7 @@ function CI.Layouts(data)
     return out
 end
 
---------------------------------------------------------------------------------
 -- helpers
---------------------------------------------------------------------------------
 
 local function num(v) return type(v) == "number" and v or nil end
 local function bool(v) if type(v) == "boolean" then return v end return nil end
@@ -98,9 +91,7 @@ local function place(pos)
     return point, sc(num(pos[4])), sc(num(pos[5]))
 end
 
---------------------------------------------------------------------------------
 -- appearance
---------------------------------------------------------------------------------
 
 local function convertAppearance(a, out, report)
     if type(a) ~= "table" then return end
@@ -178,9 +169,7 @@ local function convertAppearance(a, out, report)
     report.done[#report.done + 1] = "CELLR_APPEARANCE"
 end
 
---------------------------------------------------------------------------------
 -- indicators
---------------------------------------------------------------------------------
 
 -- Plain icon indicators: source name -> Nucleus key.
 local ICONS = {
@@ -403,9 +392,7 @@ local function convertCustom(list, report)
     return out
 end
 
---------------------------------------------------------------------------------
 -- layouts
---------------------------------------------------------------------------------
 
 local function convertGroup(layout, out, report, isRaid)
     local main = layout.main
@@ -499,9 +486,7 @@ local function convertSide(layout, profile, report)
     report.done[#report.done + 1] = "CELLR_PETS"
 end
 
---------------------------------------------------------------------------------
 -- click casting
---------------------------------------------------------------------------------
 
 local BUTTONS = { [1] = "LeftButton", [2] = "RightButton", [3] = "MiddleButton", [4] = "Button4", [5] = "Button5" }
 local PLAIN = { target = "target", togglemenu = "menu", focus = "focus", assist = "assist" }
@@ -595,9 +580,7 @@ local function convertClickCasting(cc, profile, report)
         report.done[#report.done + 1] = "CELLR_CLICK"
     end
 end
---------------------------------------------------------------------------------
 -- spell lists (externals / defensives the player switched off)
---------------------------------------------------------------------------------
 
 local function convertDisabled(cell, key, rowKey, profile)
     local disabled = cell and cell[key] and cell[key].disabled
@@ -614,9 +597,7 @@ local function convertDisabled(cell, key, rowKey, profile)
     end
 end
 
---------------------------------------------------------------------------------
 -- entry point
---------------------------------------------------------------------------------
 
 local function indicatorsOf(layout, name)
     for _, e in ipairs(layout and layout.indicators or {}) do

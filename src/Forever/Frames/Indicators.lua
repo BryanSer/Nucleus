@@ -10,9 +10,8 @@ local Abbrev = N.Abbreviate or _G.AbbreviateNumbers or function(v)
     return tostring(v)
 end
 
--- Indicator framework. Each indicator is a small module with create/update hooks and a list of
--- events that trigger an update. New indicators register here without touching UnitFrame or
--- HeaderGroup.
+-- Indicator framework: modules with create / update hooks and trigger events, registered without touching
+-- UnitFrame or HeaderGroup.
 
 local registry = {}
 local byEvent = {}
@@ -147,9 +146,7 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
     if N.RefreshAllButtons then N.RefreshAllButtons() end
 end)
 
---------------------------------------------------------------------------------
 -- Built-in indicators
---------------------------------------------------------------------------------
 
 -- Ordered metadata: one options sub-tab per entry. `format` = has a format dropdown. name /
 -- healthText / powerBar / status are rendered by UnitFrame, the rest are icon modules registered
@@ -184,13 +181,8 @@ local function corner(button, point, size)
     return t
 end
 
--- Role icon art (hardcoded so it survives Blizzard removing its helpers).
--- "square" is our own set, Media/Textures/NucleusRoles.tga (tools/gen_textures.ps1), a 128x64
--- sheet of 32px tiles: tank shield, healer cross, damage sword. Row 1 ("square"): bright rounded
--- squares in the role colors. Row 2 ("square2"): flat dark tiles with a role-colored rim and a
--- tilted sword.
--- "circle" is Blizzard's round role sheet, Interface/LFGFrame/UI-LFG-ICON-ROLES (256x256, 67px
--- cells, same as GetTexCoordsForRole).
+-- Role icon art, hardcoded so it survives Blizzard removing helpers. "square" / "square2" are our tiles
+-- (NucleusRoles.tga, 32px cells); "circle" is Blizzard's round role sheet (LFG-ICON-ROLES).
 local ROLE_TC_SQUARE = {
     TANK    = { 0,    0.25, 0, 0.5 },
     HEALER  = { 0.25, 0.50, 0, 0.5 },
@@ -263,10 +255,8 @@ Indicators.Register("role", {
     end,
 })
 
--- Class / specialization icon (next to the role icon): all icons live on one sheet,
--- Media/Textures/NucleusClassSpec.tga (8 columns of 64px cells; M.classSpecCells). One small frame
--- holds the class and spec icon side by side; "spec" falls back to the class icon while a member's
--- spec is unknown.
+-- Class / spec icon next to the role icon: one sheet (NucleusClassSpec.tga, 64px cells); "spec" falls back to
+-- the class icon while the spec is unknown.
 local function sheetCoords(cell)
     local cw = 1 / 8
     local x0, y0 = (cell % 8) * cw, math.floor(cell / 8) * cw
@@ -345,9 +335,7 @@ Indicators.Register("leader", {
     end,
 })
 
--- Blizzard's ready-check marks are atlases on current clients (the old
--- Interface/RaidFrame/ReadyCheck-* files and the globals pointing at them no longer give a visible
--- icon). The atlas is used when the client knows it, the old file path is the fallback.
+-- Ready-check marks are atlases on current clients; the old file path is the fallback.
 local READY_ATLAS = {
     ready    = "UI-LFG-ReadyMark-Raid",
     notready = "UI-LFG-DeclineMark-Raid",
@@ -423,9 +411,7 @@ Indicators.Register("readyCheck", {
     end,
 })
 
---------------------------------------------------------------------------------
 -- Raid target marker
---------------------------------------------------------------------------------
 
 Indicators.Register("raidMarker", {
     anchor = "TOP",
@@ -448,7 +434,7 @@ Indicators.Register("raidMarker", {
     end,
 })
 
--- Status Icon: cross-group, incoming summon, phase. Combat Icon is a separate indicator.
+-- Status Icon: cross-group, summon, phase. Accepted / declined summons drop off after a few seconds (`since`).
 
 -- Accepted / declined summons show for a few seconds and then drop off. `since` is stamped the
 -- first time a state is seen.
@@ -518,9 +504,7 @@ local PHASE_COLOR = {
     [3] = { 1.00, 1.00, 0.00 },
 }
 
--- Aura IDs: flag carrier buffs, orb carrier debuffs, rez debuffs, soulstone. Looked up by ID
--- inside pcall: the aura API is restricted for other units at times, and "unknown" must mean
--- "don't show", never an error.
+-- Aura IDs (flag / orb carrier, rez, soulstone), looked up in pcall: an unknown answer must mean "don't show".
 local BG_FLAGS = { [156621] = "nameplates-icon-flag-alliance", [156618] = "nameplates-icon-flag-horde" }
 local BG_ORBS = {
     [121164] = "nameplates-icon-orb-blue", [121175] = "nameplates-icon-orb-purple",
@@ -546,10 +530,8 @@ local function isShown(o, key)
     return not (o.show and o.show[key] == false)
 end
 
--- Aura-based kinds (rez pending, soulstone, flag / orb carrier) are looked up in a deferred timer
--- and cached on the button as b._auraKind. update() runs inside the secure header's own update,
--- and reading auras there taints it (Blizzard then blocks the header's SetPoint calls and the
--- whole layout breaks), so update() only reads the cache.
+-- Aura-based kinds are looked up in a timer and cached as b._auraKind: update() runs inside the header's update,
+-- where reading auras taints it, so update() only reads the cache.
 local function refreshAuraKind(b, wantDead)
     if b._auraPending then return end
     b._auraPending = true
@@ -722,9 +704,7 @@ Indicators.Register("combatIcon", {
     end,
 })
 
---------------------------------------------------------------------------------
 -- Target counter: how many group members are targeting this unit
---------------------------------------------------------------------------------
 
 local function countTargeting(b)
     if b._mock then return b._mock.targetedBy or 0 end
@@ -767,8 +747,7 @@ Indicators.Register("targetCounter", {
     end,
 })
 
--- Absorb text: the unit's total absorb shield as a number. Formats: "short" (12K), "full" (12,345)
--- or "percent" of max health. Nine positions and a class-color option like the other texts.
+-- Absorb text: total absorb as "short" (12K), "full" (12,345) or "percent" of max health.
 
 local function setAbsorbText(b, fs, v, mode)
     if v == nil then fs:SetText(""); fs:Hide(); return end
@@ -832,14 +811,10 @@ Indicators.Register("absorbText", {
     end,
 })
 
--- Status: a small rounded pill naming the unit's state (Offline, AFK, Feign Death, Ghost, Dead,
--- the three summon states) in a per-state color, with an optional running timer for Offline / AFK.
--- Position (top / center / bottom of the health bar, y offset, left / center / right) is a setting
--- and each state can be switched off. It sits on top of the name / health text instead of
--- replacing them.
+-- Status: a pill naming the unit's state (offline, AFK, dead, summon, ...) in per-state colors, with an optional
+-- timer for Offline / AFK; each state can be switched off.
 
--- Priority order (first match wins), shared with the options UI (one color row per state) and the
--- preview.
+-- Priority order (first match wins), shared with the options and the preview.
 Indicators.statusStates = {
     { key = "offline",        label = "Offline" },
     { key = "afk",            label = "AFK" },
@@ -1005,8 +980,9 @@ Indicators.Register("status", {
 
         local size = o.size or 11
         local c = (o.stateColors and o.stateColors[state]) or { 1, 1, 1 }
-        f.text:SetFont(M.font, size, "OUTLINE")
-        f.timer:SetFont(M.font, size, "OUTLINE")
+        local outline = N.UnitFrame.Outline(o)
+        f.text:SetFont(M.font, size, outline)
+        f.timer:SetFont(M.font, size, outline)
         local label
         for _, s in ipairs(Indicators.statusStates) do
             if s.key == state then label = s.label; break end
@@ -1059,14 +1035,7 @@ Indicators.Register("status", {
     end,
 })
 
--- Shield Bar: a thin bar along the bottom or top edge of the health bar, its length the absorb
--- shield as a fraction of max health. Separate from the shield overlay on the health bar
--- (Appearance > Shield). Optionally shown only when the shield overflows the missing health
--- ("overshield").
---
--- Secret-safe: the fill is driven by StatusBar:SetMinMaxValues / SetValue, which accept secret
--- numbers, and the overshield flag (possibly a secret boolean) goes straight into
--- SetAlphaFromBoolean, never into a Lua test.
+-- Shield Bar: thin bar on the bottom / top edge, growFrom "left" | "right".
 
 Indicators.Register("shieldBar", {
     create = function(b)
@@ -1118,13 +1087,8 @@ Indicators.Register("shieldBar", {
     end,
 })
 
--- Health Thresholds: a thin line across the health bar once health has fallen below one of the
--- chosen percentages. It shows the lowest percentage the unit is still under, so 90 / 50 / 25 show
--- one line at a time (the next one it is about to cross). Lines are placed from the bar's width.
---
--- Secret-safe: with readable health the numbers decide. When health is hidden, the game's health
--- calculator evaluates a color curve (alpha 1 inside the window between the previous percentage
--- and this one, 0 elsewhere) and the resulting alpha goes straight into SetAlpha.
+-- Health Thresholds: a line across the health bar below chosen percentages, one at a time (the next one to
+-- cross). With hidden health a color curve over the health calculator drives the alpha.
 
 Indicators.THRESHOLD_MAX = 8
 
@@ -1136,9 +1100,8 @@ local function curvesFor(fracs)
     thresholdCurves[key] = false
     if not (C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor) then return nil end
     local opaque, invisible = CreateColor(1, 1, 1, 1), CreateColor(1, 1, 1, 0)
-    -- Band i is "on" from the previous threshold up to this one: a curve that jumps
-    -- to opaque at the lower edge and back to invisible at the upper edge. Each jump
-    -- is a pair of points a hair apart, so the curve stays valid (x strictly rising).
+    -- Band i is on between the previous threshold and this one; each jump is a pair of points a hair apart so x
+    -- keeps rising.
     local EDGE = 1e-4
     local function band(lo, hi)
         local curve = C_CurveUtil.CreateColorCurve()
@@ -1251,10 +1214,7 @@ Indicators.Register("healthThresholds", {
         end
     end,
 })
--- Aggro Border: a border inside the frame while an enemy is about to switch to the unit (orange,
--- "almost aggro") or attacks it (red, "aggro"). Blizzard's yellow "building threat" level is not
--- shown. Both colors are settings, defaulting to Blizzard's threat colors. The edges fade toward
--- the inside or can be solid. Replaces the old fixed red edge.
+-- Aggro Border: orange "almost aggro", red "aggro" (colors are settings, Blizzard's by default); yellow is not shown.
 
 Indicators.Register("aggroBorder", {
     events = {
@@ -1354,9 +1314,7 @@ Indicators.Register("levelText", {
             return
         end
 
-        -- A unit's level can come back as a secret number. It can't be compared against 0 for the
-        -- "??" case, but SetFormattedText is a secret-safe sink, so it goes straight through. The
-        -- format choice is our own setting, never derived from the secret value.
+        -- Level can be a secret number: SetFormattedText is a secret-safe sink, so it goes straight through.
         local fmt = o.format
         local word = (fmt == "short") and L["Lvl"] or L["Level"]
         if IsSecret(level) then

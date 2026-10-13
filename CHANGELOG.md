@@ -1,7 +1,31 @@
 # Nucleus Changelog
 
-The in-game changelog (Options > Changelog) is generated from the
-per-version `Core/Changelog.lua` files. Keep this file in sync with them.
+## 1.0.2 (2026-10-13)
+
+- Fixed the health bar gradient falling back to the class color while health is hidden; Fade at Full Health also works then.
+- Dispel spells such as Dispel Magic appear in the Click-Casting spell list.
+- Click-Casting: the Item list shows your equipped trinkets and other usable equipped items, bound by slot so they follow a swap and work in combat.
+- New "Font outline" option (thin, thick, none) for the name, health text and status indicators.
+- "Cast by" choices (me, anyone, others) for custom indicators and the Debuffs row, so debuffs cast by players such as Weakened Soul can be shown.
+- General tab split into "All profiles" and "Per profile" sections; Tooltip, Click-Casting, Utilities and Spotlight can be shared by all profiles; new tooltip position option.
+- Frame position: anchor point, X / Y values and centering per group; a middle anchor point grows the group from the middle.
+- Test Mode: a menu next to the button previews several groups at once, and the preview follows Group by and Sort.
+- Frames redraw right away when a group member leaves; Spotlight units can be moved up and down; Auto Switch has a Battleground (10) rule.
+- Missing Buffs: Shadow Protection added, and each Blessing can be switched on or off. (Forever, Classic Era, TBC)
+- Smaller changes: one "Move tools" switch, Spotlight in Copy settings, larger group name offsets, X / Y names for Attach to owner, "Group" instead of "Party" in English, no duplicate movers in Test Mode; marker buttons set marks through /tm.
+- Retail: NPC frames are on by default and show friendly boss units (such as the end boss of Temple of Sethraliss) next to the group frames; companions stay among the group frames unless "Move companions here" is on; new /nucnpc command.
+- First version of Classic Era and TBC support, so far tested only by the author: simpler than Retail and Forever (no ping, heal / shield prediction, private auras or targeted spell bars), spells match by name so every rank works, plus a Targeted Spells indicator that only exists there.
+
+## 1.0.1 (2026-10-12)
+
+- Click-Casting: mouse wheel, keyboard keys and extra mouse buttons (6 and up) can be bound; macros fire reliably.
+- Frame width updates the header and the shield, heal prediction and absorb bars right away.
+- Icon rows and custom indicators: new "Icons per row" and "Row spacing", a larger spacing range, and fixes for Anchor and size.
+- The indicator preview shows the configured frame size and your class color.
+- Test mode shows up to 8 raid groups, follows the group selection and custom sorting, and uses a 1 tank / 1 healer / 3 damage dealer party.
+- Move handles: smaller and resizable, a "Bar" style, X / Y offset, ALT-only drag mode, only the edited group is shown; party and raid frames can be moved in combat.
+- The minimap button is a standard LibDBIcon button, so button managers can group it.
+- Fixed the "Reload now" button after changing the language.
 
 ## 1.0.0 (2026-10-08)
 

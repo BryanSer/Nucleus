@@ -1,9 +1,8 @@
 local _, ns = ...
 local N = ns.N
 
--- Secure group headers. Blizzard's SecureGroupHeaderTemplate owns child creation, visibility and
--- unit assignment; we only feed it attributes (out of combat) and skin each child once via
--- CallMethod.
+-- Secure group headers: Blizzard's template owns child creation, visibility and unit assignment; we feed it
+-- attributes out of combat and skin each child once.
 
 local HG = {}
 N.HeaderGroup = HG
@@ -61,9 +60,7 @@ local function applyChildSize(header)
     forChildren(header, function(child) child:SetSize(w, h) end)
 end
 
--- Styles and binds every child. The initialConfigFunction already does it via CallMethod for new
--- children; this extra pass also runs on roster/zone events and after (re)configuration. Wrapped
--- so one bad child can't abort header setup.
+-- Styles and binds every child (also on roster / zone events); one bad child can't abort header setup.
 local function styleChildren(header)
     forChildren(header, function(child)
         local ok, err = pcall(function()
@@ -95,9 +92,7 @@ local function applyFlow(header, cfg)
     header:SetAttribute("columnSpacing", cfg.columnSpacing or cfg.spacing)
 end
 
---------------------------------------------------------------------------------
 -- Pets / companions
---------------------------------------------------------------------------------
 
 local NPC_SLOTS = 4
 
@@ -106,11 +101,14 @@ local function isNpcUnit(unit)
     return UnitExists(unit) and UnitInPartyIsAI and UnitInPartyIsAI(unit) and true or false
 end
 
--- While the NPC frames are on, NPC party members leave the party frames: the header gets an
--- explicit name list without them. Returns nil when nothing needs filtering (no NPC in the group,
--- or the feature is off).
+-- NPC companions leave the group frames for the NPC frames only with "Move companions here".
+local function companionsMoved()
+    return (N.db.npc and N.db.npc.enabled and N.db.npc.moveCompanions) and true or false
+end
+
+-- The party header's name list without NPC companions; nil when nothing needs filtering.
 local function partyNameFilter()
-    if not (N.db.npc and N.db.npc.enabled) or IsInRaid() then return nil end
+    if not companionsMoved() or IsInRaid() then return nil end
     local any, names = false, {}
     if N.db.party.showPlayer then names[#names + 1] = GetUnitName("player", true) end
     for i = 1, 4 do
@@ -124,9 +122,7 @@ local function partyNameFilter()
     return table.concat(names, ",")
 end
 
--- Spotlight: the units its entries stand for right now (out of combat only, it reads the roster
--- and assigned roles). "target" / "focus" stay tokens of their own, the rest become the member's
--- raid/party token.
+-- Spotlight: the units its entries stand for right now (out of combat; reads the roster and roles).
 local function spotlightUnits()
     local cfg = N.db.spotlight
     local out, used = {}, {}
@@ -186,13 +182,10 @@ local function placeInContainer(container, buttons, cfg, count)
     else container:SetSize(w, n * h + (n - 1) * sp) end
 end
 
--- Custom order (Appearance > Layout > Sorting) ----------------------------------
--- The header can sort by role or class but can't put chosen people first. For a custom order the
--- whole roster is ordered here and handed to the header as an explicit name list (sortMethod
--- NAMELIST). That only changes out of combat, like every header attribute.
+-- Custom order (Appearance > Layout > Sorting): the header can't put chosen people first, so the roster is
+-- ordered here and handed over as a name list (NAMELIST); out of combat only.
 
--- Returns the rank of each role (1 = first) and the pinned names, or nil when
--- the custom order is off.
+-- Role ranks (1 = first) and pinned names; nil when the custom order is off.
 local function sortConfig(key)
     local o = N.db[key] and N.db[key].ordering
     if not (o and o.enabled) then return nil end
@@ -212,9 +205,7 @@ local function raidGroupAllowed(group)
 end
 N.RaidGroupAllowed = raidGroupAllowed
 
--- Role order without pinned names needs no name list: the header sorts by assigned role itself
--- (groupBy ASSIGNEDROLE), which also follows role changes on its own. Returns the grouping order
--- or nil.
+-- Role order without pins needs no name list: the header sorts by assigned role. Returns the grouping order or nil.
 local function nativeRoleOrder(key)
     local rank, pins = sortConfig(key)
     if not rank or #pins > 0 then return nil end
@@ -239,7 +230,7 @@ local function customNameList(key)
         for i = 1, 4 do units[#units + 1] = "party" .. i end
     end
 
-    local npcOut = key == "party" and N.db.npc and N.db.npc.enabled
+    local npcOut = key == "party" and companionsMoved()
     local list = {}
     local inRaid = key == "raid" and IsInRaid()
     for i, u in ipairs(units) do
@@ -398,7 +389,7 @@ local function configurePetContainer(container)
         -- then the friendly boss-unit NPCs (shown by a secure unit condition).
         local units = {}
         for i = 1, 4 do
-            if isNpcUnit("party" .. i) then units[#units + 1] = "party" .. i end
+            if companionsMoved() and isNpcUnit("party" .. i) then units[#units + 1] = "party" .. i end
         end
         order = {}
         for i, b in ipairs(container.buttons) do
@@ -435,7 +426,19 @@ local function configurePetContainer(container)
         if owner then attachTo(container.buttons[1], owner, cfg) end
     end
     container:ClearAllPoints()
-    container:SetPoint(cfg.point, UIParent, cfg.point, cfg.x, cfg.y)
+    local host = key == "npc" and cfg.attachEnabled and ((IsInRaid() and N.headers.raid) or N.headers.party or N.headers.raid)
+    if host then
+        -- Next to the group frames (the raid frames in a raid), following them.
+        local s = SIDES[cfg.attachSide] or SIDES.RIGHT
+        local gap, shift = cfg.attachGap or 2, cfg.attachShift or 0
+        local x, y = gap, shift
+        if cfg.attachSide == "LEFT" then x, y = -gap, shift
+        elseif cfg.attachSide == "TOP" then x, y = shift, gap
+        elseif cfg.attachSide == "BOTTOM" then x, y = shift, -gap end
+        container:SetPoint(s[1], host, s[2], x, y)
+    else
+        container:SetPoint(cfg.point, UIParent, cfg.point, cfg.x, cfg.y)
+    end
     styleChildren(container)
 end
 
@@ -601,10 +604,8 @@ local function createHeader(key)
         return c
     end
     local template = (key == "groupPets") and "SecureGroupPetHeaderTemplate" or "SecureGroupHeaderTemplate"
-    -- Party/raid headers sit inside a plain holder frame: the show/hide state driver goes on the
-    -- holder, never on the header (the header re-reads the roster when the holder is shown). A
-    -- driver on the header made the game's own header update run tainted in combat and get
-    -- blocked.
+    -- Party/raid headers sit in a plain holder: the visibility driver goes on the holder, never on the header (a
+    -- driver on the header tainted the game's header update in combat).
     local holder
     if key == "party" or key == "raid" then
         holder = CreateFrame("Frame", name .. "Holder", UIParent, "SecureFrameTemplate")
@@ -618,9 +619,8 @@ local function createHeader(key)
     N.headers[key] = header
     configure(header)
 
-    -- Have the header create every child it could ever need now, out of combat. A child born
-    -- inside the header's own update in combat runs our insecure styling in the middle of it, and
-    -- the game then blocks that update (the SetPoint on the first child).
+    -- Create every child the header could need now, out of combat: a child born in its update in combat runs our
+    -- styling mid-update and the game blocks it.
     local perColumn = tonumber(header:GetAttribute("unitsPerColumn")) or 5
     local columns = tonumber(header:GetAttribute("maxColumns")) or 1
     header:SetAttribute("startingIndex", -(perColumn * columns))
@@ -692,7 +692,7 @@ function HG.Init()
         end
         -- NPC companions: reassign their frames and re-filter the party frames
         -- (only when the NPC list actually changed).
-        if N.db.npc and N.db.npc.enabled then
+        if companionsMoved() then
             local sig = tostring(partyNameFilter())
             if sig ~= lastFilter then
                 lastFilter = sig
@@ -711,6 +711,18 @@ function HG.Init()
                     configure(header)
                 end
             end, "spotlight-roster")
+        end
+    end)
+    -- The NPC frames hang on the party frames or the raid frames: re-anchor when that changes.
+    local lastInRaid
+    rosterFrame:HookScript("OnEvent", function()
+        local r = IsInRaid() and true or false
+        if r ~= lastInRaid then
+            lastInRaid = r
+            local npc = N.headers.npc
+            if npc and N.db.npc.attachEnabled then
+                N.RunWhenSafe(function() configure(npc) end, "npc-attach")
+            end
         end
     end)
     rosterFrame:RegisterEvent("UNIT_NAME_UPDATE")
@@ -734,9 +746,7 @@ function HG.Init()
     end)
 end
 
--- React to option changes. Section is "party" / "raid" / "general" / ...; indicator and appearance
--- sub-keys are handled by their own modules, the header only cares about layout, size and
--- visibility.
+-- Option changes: the header only cares about layout, size and visibility.
 N:On("NUCLEUS_SETTING_CHANGED", function(_, section, path)
     if not N.GROUP_KEYS[section] then return end
     if path and (path:find("%.indicators%.") or path:find("%.appearance%.") or path:find("%.auras%.") or path:find("%.customIndicators")) then return end
@@ -771,6 +781,39 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, section, path)
     end
     N.RunWhenSafe(N.RefreshAllButtons, "refresh-buttons")
 end)
+
+-- /nucnpc: what the game says about the group (for reports from Delves / follower dungeons).
+local function shown(v)
+    local ok, r = pcall(tostring, v)
+    return ok and r or "?"
+end
+SLASH_NUCLEUSNPC1 = "/nucnpc"
+SlashCmdList.NUCLEUSNPC = function()
+    N:Print("npc frames:", shown(N.db.npc and N.db.npc.enabled), "| IsInGroup:", shown(IsInGroup()),
+        "| IsInRaid:", shown(IsInRaid()), "| members:", shown(GetNumGroupMembers()),
+        "| subgroup members:", shown(GetNumSubgroupMembers and GetNumSubgroupMembers()))
+    for _, u in ipairs({ "player", "party1", "party2", "party3", "party4" }) do
+        if UnitExists(u) then
+            N:Print(u, "|", shown(UnitName(u)), "| AI:", shown(UnitInPartyIsAI and UnitInPartyIsAI(u)),
+                "| player:", shown(UnitIsPlayer(u)), "| in party:", shown(UnitInParty(u)))
+        end
+    end
+    for i = 1, 8 do
+        local u = "boss" .. i
+        if UnitExists(u) then
+            N:Print(u, "|", shown(UnitName(u)), "| friendly:", shown(UnitIsFriend("player", u)),
+                "| can assist:", shown(UnitCanAssist("player", u)))
+        end
+    end
+    local npc = N.headers.npc
+    if npc and npc.buttons then
+        for i, b in ipairs(npc.buttons) do
+            N:Print("npc slot", i, "| unit:", shown(b:GetAttribute("unit")), "| shown:", shown(b:IsShown()))
+        end
+    end
+    local ph = N.headers.party
+    N:Print("party header shown:", shown(ph and ph:IsShown()))
+end
 
 -- /nucorder: what the custom order produced for the raid and why (for bug reports).
 SLASH_NUCLEUSORDER1 = "/nucorder"

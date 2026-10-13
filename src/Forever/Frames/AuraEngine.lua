@@ -2,33 +2,13 @@ local _, ns = ...
 local N = ns.N
 local M = N.Media
 
--- Aura engine (Retail 12.1+)
---
--- Since 12.1 addon code can't read a unit's auras in combat (every field is sealed), but it can
--- still display them: the game's own AuraContainer frame is told which auras to show (a filter
--- string like "HELPFUL|PLAYER" plus an optional list of spell IDs) and creates, fills and drives
--- the icon buttons itself. We create the container, say how its buttons look (initializeFrame),
--- where it sits and which unit it watches.
---
---   E.Supported()              -> bool (needs a non-combat first call)
---   E.Apply(button, id, spec)  -> build / retune one container; spec = nil removes it
---   E.Remove(button, id)
---
--- spec = {
---   groups = { { key, filter, candidate = {...}, max, token (dispel type), border = {r,g,b} }, ...
---     },
---   shape  = "icon" | "rect" | "bar" | "border" | "overlay" | "text" | "dispel",
---   size, spacing, point, x, y, growth, max,
---   cd = "spiral" | "vertical" | "none", stacks, time, timeSize, timeX, timeY, stackSize, stackX,
---     stackY,
---   timeColor = { seconds, color }, color = {r,g,b}, width, height, thickness, opacity, around,
---     text, fill,
---   dispel = { ... }  (shape "dispel": highlight, border, type-icon settings)
--- }
---
--- Containers can't be created in combat (the game errors), so structural changes wait for it to
--- end. Numeric things (size, spacing, position, font sizes) are applied live to the buttons the
--- container has handed out.
+-- Aura engine (Retail 12.1+). Addon code can't read auras in combat, but it can tell the game's own
+-- AuraContainer which auras to show (a filter string plus optional spell IDs) and how its buttons look; the
+-- game creates and drives the icons.
+--   E.Supported()   E.Apply(button, id, spec) (spec = nil removes)   E.Remove(button, id)
+-- spec = { groups = { { key, filter, candidate, max, token, border } }, shape = "icon" | "rect" | "bar" |
+--   "border" | "overlay" | "text" | "dispel", size, spacing, point, x, y, growth, max, cd, stacks, time, ... }
+-- Containers can't be created in combat: structural changes wait for it to end, numbers apply live.
 
 local E = {}
 N.AuraEngine = E
@@ -38,9 +18,7 @@ local supported
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 
--- v UI units as whole physical pixels at the frame's scale. Plain 1-unit insets land on different
--- sub-pixels at opposite corners when the UI scale isn't 1, which made two edges of an icon look
--- thicker.
+-- Snaps UI units to whole pixels at the frame's scale, so 1px borders look even on every side.
 local function snap(frame, v)
     local PU = _G.PixelUtil
     if PU and PU.GetNearestPixelSize and frame and frame.GetEffectiveScale then
@@ -71,22 +49,17 @@ function E.Supported()
     return supported
 end
 
---------------------------------------------------------------------------------
 -- formatters
---------------------------------------------------------------------------------
 
--- The countdown text is a formatter over the remaining seconds: bands switch the number format
--- (whole seconds, or tenths below `decimals`) and the color (red below `seconds`). The game
--- evaluates it, so it works while the aura's timing is hidden.
+-- Countdown text is a formatter over the remaining seconds (decimal / color bands) the game evaluates, so it
+-- works while the timing is hidden.
 local formatters = {}
 local function hex(c)
     return ("|cff%02x%02x%02x"):format(math.floor(c[1] * 255 + 0.5), math.floor(c[2] * 255 + 0.5), math.floor(c[3] * 255 + 0.5))
 end
 
--- A highlight tinting the health bar must sit BELOW the frame's texts and icons. The aura buttons
--- live in frames above them, so the tint gets its own frame, just above the health bar's
--- absorb/heal overlays and below the indicator overlay. It is a child of the button, so it shows
--- and hides with it.
+-- A health bar highlight sits below the texts and icons: its own frame above the overlays, below the indicator
+-- overlay.
 local function lowLayer(button, owner)
     local host = owner.health or owner
     local f = CreateFrame("Frame", nil, button)
@@ -131,9 +104,7 @@ local function formatterFor(tc)
     if pcall(f.SetBreakpoints, f, points) then formatters[key] = f end
     return formatters[key] or nil
 end
---------------------------------------------------------------------------------
 -- button construction (initializeFrame)
---------------------------------------------------------------------------------
 
 local function pulseGroup(region, duration)
     local ag = region:CreateAnimationGroup()
@@ -147,14 +118,9 @@ local function pulseGroup(region, duration)
     return ag, a
 end
 
--- Frame-wide glows (custom indicator "Glow", also the preview). Only what the game animates by
--- itself, no Lua per frame:
---   pulse  a ring (a mask hollows a white texture) fading in and out
---   halo   a soft glow fading in and out
---   pixel dashes marching round the edge: tiled strips that a translation animation slides by
---     exactly one period, clipped to the edge
---   E.NewGlow(parentFrame, anchorFrame) -> g; g:Show(style, r, g, b, offset, thickness, speed,
---     length); g:Hide()
+-- Frame-wide glows (custom indicator Glow, preview): only what the game animates itself, no Lua per frame.
+-- pulse (fading ring), halo (soft glow), pixel (dashes marching round the edge).
+-- E.NewGlow(parent, anchor) -> g; g:Show(style, r, g, b, offset, thickness, speed, length); g:Hide()
 local PROC_ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
 
 local function loopingAlpha(region, duration)
@@ -230,9 +196,7 @@ function E.NewGlow(parent, anchor)
             clip:SetPoint("BOTTOMLEFT", wrap, "BOTTOMLEFT", inset, inset + th)
             clip:SetWidth(th)
         end
-        -- Going round clockwise: top moves right, right side down, bottom left, left side up.
-        -- `reverse` goes the other way. The strip is one period longer than the clip, on the side
-        -- it slides in from.
+        -- Clockwise: top moves right, right down, bottom left, left up; `reverse` flips it.
         if horizontal then
             if (side == "top") ~= (reverse == true) then
                 tex:SetPoint("TOPLEFT", clip, "TOPLEFT", -period, 0)
@@ -653,9 +617,7 @@ local function initButton(h, group)
     end
 end
 
---------------------------------------------------------------------------------
 -- containers
---------------------------------------------------------------------------------
 
 local function sortOpts(opts)
     if AuraContainerSortMethod and AuraContainerSortMethod.Default then opts.sortMethod = AuraContainerSortMethod.Default end

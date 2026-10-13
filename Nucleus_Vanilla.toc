@@ -1,0 +1,96 @@
+## Interface: 11508, 11509
+## Title: Nucleus
+## Notes: Modern raid and party frames.
+## Notes-deDE: Moderne Schlachtzugs- und Gruppenrahmen.
+## Notes-esES: Marcos modernos de banda y de grupo.
+## Notes-esMX: Marcos modernos de banda y de grupo.
+## Notes-frFR: Cadres modernes de raid et de groupe.
+## Notes-itIT: Riquadri moderni per incursioni e gruppi.
+## Notes-ptBR: Quadros modernos de raide e de grupo.
+## Notes-ruRU: Современные рамки рейда и группы.
+## Notes-koKR: 현대적인 공격대 및 파티 프레임.
+## Notes-zhCN: 现代化的团队和小队框体。
+## Notes-zhTW: 現代化的團隊和隊伍框架。
+## Author: NeRgY
+## IconTexture: Interface\AddOns\Nucleus\Media\Textures\Logo
+## Version: 1.0.2
+## SavedVariables: NucleusDB_Vanilla
+## X-Category: Unit Frames
+## X-License: All Rights Reserved
+## X-Client: Classic Era (Vanilla)
+## Category: Unit Frames
+## Category-enUS: Unit Frames
+## Category-deDE: Einheitenfenster
+## Category-esES: Marcos de unidades
+## Category-esMX: Marcos de unidades
+## Category-frFR: Portraits d'unités
+## Category-itIT: Riquadri unità
+## Category-koKR: 유닛 프레임
+## Category-ptBR: Quadros de unidade
+## Category-ruRU: Рамки юнитов
+## Category-zhCN: 单位框体
+## Category-zhTW: 單位框架
+## X-Curse-Project-ID: 1723779
+## X-Wago-ID: mNwwjPNo
+
+Libs\LibStub\LibStub.lua
+Libs\CallbackHandler-1.0\CallbackHandler-1.0.lua
+Libs\LibDataBroker-1.1\LibDataBroker-1.1.lua
+Libs\LibDBIcon-1.0\LibDBIcon-1.0.lua
+Libs\LibDeflate\LibDeflate.lua
+Libs\LibSerialize\LibSerialize.lua
+
+src\Vanilla\Core\Init.lua
+src\Vanilla\Core\Util.lua
+src\Vanilla\Core\Secret.lua
+src\Vanilla\Core\Compat.lua
+src\Vanilla\Core\Locale.lua
+src\Vanilla\Locales\enUS.lua
+src\Vanilla\Locales\deDE.lua
+src\Vanilla\Locales\esES.lua
+src\Vanilla\Locales\esMX.lua
+src\Vanilla\Locales\frFR.lua
+src\Vanilla\Locales\itIT.lua
+src\Vanilla\Locales\ptBR.lua
+src\Vanilla\Locales\ruRU.lua
+src\Vanilla\Locales\koKR.lua
+src\Vanilla\Locales\zhCN.lua
+src\Vanilla\Locales\zhTW.lua
+src\Vanilla\Core\Media.lua
+src\Vanilla\Core\Classic.lua
+src\Vanilla\Core\Defaults.lua
+src\Vanilla\Core\SpellClasses.lua
+src\Vanilla\Core\Profiles.lua
+src\Vanilla\Core\CellImport.lua
+src\Vanilla\Core\Database.lua
+src\Vanilla\Core\Translit.lua
+src\Vanilla\Core\About.lua
+src\Vanilla\Core\Changelog.lua
+src\Vanilla\UI\Skin.lua
+src\Vanilla\UI\ColorPicker.lua
+src\Vanilla\UI\Widgets.lua
+src\Vanilla\UI\Dialog.lua
+src\Vanilla\UI\OptionsFrame.lua
+src\Vanilla\UI\Supporters.lua
+src\Vanilla\UI\ProfilesPanel.lua
+src\Vanilla\UI\CopyPanel.lua
+src\Vanilla\UI\Minimap.lua
+src\Vanilla\Frames\Indicators.lua
+src\Vanilla\Frames\MissingBuffs.lua
+src\Vanilla\Frames\TargetedSpells.lua
+src\Vanilla\Frames\Actions.lua
+src\Vanilla\Frames\GroupSpec.lua
+src\Vanilla\Frames\GroupLabels.lua
+src\Vanilla\Frames\Tools.lua
+src\Vanilla\Frames\Tooltip.lua
+src\Vanilla\Frames\UnitFrame.lua
+src\Vanilla\Frames\Auras.lua
+src\Vanilla\Frames\Glow.lua
+src\Vanilla\Frames\CustomIndicators.lua
+src\Vanilla\Frames\HeaderGroup.lua
+src\Vanilla\Frames\ClickCasting.lua
+src\Vanilla\Frames\TestMode.lua
+src\Vanilla\Frames\Preview.lua
+src\Vanilla\Frames\HideBlizzard.lua
+src\Vanilla\Frames\Layout.lua
+src\Vanilla\Bootstrap.lua

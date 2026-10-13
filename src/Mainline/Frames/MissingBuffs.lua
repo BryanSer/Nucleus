@@ -4,13 +4,9 @@ local M = N.Media
 local Indicators = N.Indicators
 local IsSecret = N.IsSecret
 
--- Missing Buffs: an icon on a unit's frame for every raid buff it lacks. Standalone, reads the
--- unit's auras itself. A buff only counts as expected when someone in the group can provide it,
--- and only buffs enabled in the settings are checked.
---
--- Midnight can hide spell IDs on other units. If any aura on the unit has a hidden ID the answer
--- is unknown and nothing is shown (better silent than a false "missing"). The scan runs in a
--- timer, never inside the secure header's update, and the result is cached on the button.
+-- Missing Buffs: an icon per raid buff a unit lacks, when someone in the group can provide it and the buff is
+-- enabled. A hidden aura ID makes the answer unknown, so nothing is shown. The scan runs in a timer, not in the
+-- header's update, and is cached on the button.
 
 local BUFFS = {
     { key = "fortitude", label = "Power Word: Fortitude", class = "PRIEST",  ids = { 21562 } },

@@ -11,9 +11,7 @@ local function uc(c) return c[1], c[2], c[3], c[4] or 1 end
 
 local panel
 
---------------------------------------------------------------------------------
 -- small helpers
---------------------------------------------------------------------------------
 
 local function Hint(card, text, color)
     local fs = N.FontString(card, 11)
@@ -87,17 +85,13 @@ local function MakeTextArea(parent, height)
     return box
 end
 
---------------------------------------------------------------------------------
 -- name prompt / confirm dialogs
---------------------------------------------------------------------------------
 
 local function PromptName(text, default, onAccept)
     N.Dialog.Prompt(text, default, onAccept)
 end
 
---------------------------------------------------------------------------------
 -- export / import popups
---------------------------------------------------------------------------------
 
 local exportPopup, importPopup
 
@@ -387,9 +381,7 @@ local function ShowCellImport()
     cellPopup.area.edit:SetFocus()
 end
 
-----
 -- the panel
---------------------------------------------------------------------------------
 
 local function ProfileOptions(withNoChange)
     local out = {}
@@ -479,15 +471,17 @@ local function BuildAutoSwitch(p)
     lab:SetPoint("LEFT", 0, 0)
     lab:SetText(L["Rules apply per"])
     lab:SetTextColor(uc(M.color.textDim))
+    local hasSpecs = P.HasSpecs()
     local track = CreateFrame("Frame", nil, sw)
-    track:SetSize(2 * 120 + 8, 26)
+    track:SetSize((hasSpecs and 2 or 1) * 120 + 8, 26)
     track:SetPoint("RIGHT", sw, "RIGHT", 0, 0)
     N.SkinRound(track, M.color.segment, M.color.line, true)
     local prev
-    for _, d in ipairs({
-        { "role", role and (L["Role"] .. ": " .. L[role]) or L["Role"] },
-        { "spec", specName and (L["Spec"] .. ": " .. specName) or L["Spec"] },
-    }) do
+    local pills = { { "role", role and (L["Role"] .. ": " .. L[role]) or L["Role"] } }
+    if hasSpecs then
+        pills[2] = { "spec", specName and (L["Spec"] .. ": " .. specName) or L["Spec"] }
+    end
+    for _, d in ipairs(pills) do
         local b = CreateFrame("Button", nil, track)
         b:SetSize(120, 20)
         if prev then b:SetPoint("LEFT", prev, "RIGHT", 2, 0)

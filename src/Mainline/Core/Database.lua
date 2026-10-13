@@ -1,11 +1,8 @@
 local _, ns = ...
 local N = ns.N
 
--- Loads and normalizes NucleusDB_Mainline, then fires NUCLEUS_DB_READY.
---
--- dbVersion (Defaults.lua) counts changes to the saved data layout. If a release renames or moves
--- a setting or changes what a value means, bump dbVersion and add a block below guarded by
--- `fromVersion < <new number>`. Plain new settings need nothing, defaults are merged in.
+-- Loads NucleusDB, merges defaults and fires NUCLEUS_DB_READY. When a release changes the layout of saved
+-- data, bump dbVersion (Defaults.lua) and add a block below guarded by `fromVersion < n`.
 local function InitDB()
     local raw = _G.NucleusDB_Mainline
     if type(raw) ~= "table" then
@@ -13,14 +10,11 @@ local function InitDB()
         _G.NucleusDB_Mainline = raw
     end
 
-    -- 0 for a brand-new save. Saves from development builds carry a higher number and are just
-    -- renumbered.
+    -- 0 for a new save; development builds carry a higher number and are renumbered.
     local fromVersion = raw.dbVersion or 0
 
-    -- Profiles.Setup folds older flat saves into the first profile, prunes/merges defaults and
-    -- installs the N.db proxy.
-    -- Before a profile is merged with defaults: the old power bar switches (tanks / healers /
-    -- damage dealers) become the per-class table.
+    -- Profiles.Setup merges defaults and installs the N.db proxy. First, the old power bar switches (tanks /
+    -- healers / damage dealers) become the per-class table.
     N.Profiles.PreNormalize = function(tbl)
         for _, k in ipairs({ "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }) do
             local pb = type(tbl[k]) == "table" and type(tbl[k].indicators) == "table" and tbl[k].indicators.powerBar
@@ -42,8 +36,7 @@ local function InitDB()
 
     N.db.dbVersion = N.Defaults.dbVersion
 
-    -- One-time: pet "attach to owner" now defaults to on; profiles saved while it was off get it
-    -- switched on once.
+    -- One-time: pet "attach to owner" switched on.
     if not N.db.timeColorDefaulted then
         for _, k in ipairs({ "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }) do
             N.db[k].appearance.timeColor.enabled = true
@@ -56,8 +49,7 @@ local function InitDB()
         end
         N.db.decimalsOffDefaulted = true
     end
-    -- One-time: the Glow indicator's Distance now counts outwards from the frame edge and the
-    -- Sparks style is gone. Older entries are reset, in every profile.
+    -- One-time: Glow distance now counts from the frame edge, the Sparks style is gone.
     if not N.db.glowDistanceReset then
         for _, prof in pairs(raw.profiles or {}) do
             for _, k in ipairs({ "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }) do
@@ -84,9 +76,7 @@ local function InitDB()
         end
         N.db.glowProcRemoved = true
     end
-    -- One-time: the Blizzard-classification fallback of the Defensive / External rows now starts
-    -- off. The game matches the spell list itself (also in combat); the fallback only added
-    -- unrelated buffs next to the listed ones.
+    -- One-time: the Blizzard-classification fallback of the Defensive / External rows starts off.
     if not N.db.blizzFilterOff then
         for _, prof in pairs(raw.profiles or {}) do
             for _, k in ipairs({ "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }) do
@@ -99,14 +89,20 @@ local function InitDB()
         end
         N.db.blizzFilterOff = true
     end
+    -- One-time: the NPC frames start on.
+    if not N.db.npcDefaultedOn then
+        for _, prof in pairs(raw.profiles or {}) do
+            if type(prof) == "table" and type(prof.npc) == "table" then prof.npc.enabled = true end
+        end
+        N.db.npcDefaultedOn = true
+    end
     if not N.db.petAttachDefaulted then
         N.db.ownPet.attachEnabled = true
         N.db.groupPets.attachEnabled = true
         N.db.petAttachDefaulted = true
     end
 
-    -- Before anything paints. The options window is built lazily on first open, so it always sees
-    -- the saved highlight color.
+    -- Before anything paints: the options window is built lazily and must see the saved highlight color.
     if N.Recolor then N.Recolor(N.db.accentColor) end
 
     N:Fire("NUCLEUS_DB_READY")
@@ -118,8 +114,7 @@ N:On("ADDON_LOADED", function(_, name)
     end
 end)
 
--- Every group of unit frames. party and raid are the real groups; the other three (own pet, group
--- pets, NPC companions) are the pet side.
+-- party and raid are the real groups; own pet, group pets and NPC companions are the pet side.
 N.GROUP_KEYS = { party = true, raid = true, ownPet = true, groupPets = true, npc = true, spotlight = true }
 N.SPOTLIGHT_MAX = 10 -- most frames the spotlight group can show
 N.PET_KEYS = { ownPet = true, groupPets = true, npc = true }
@@ -136,8 +131,7 @@ function N:SetMode(mode)
     self:Fire("NUCLEUS_EDIT_MODE", mode)
 end
 
--- Saves a setting and notifies listeners. path is dotted, e.g. "party.width"; listeners key on the
--- top-level section.
+-- Saves a setting (dotted path) and notifies listeners, which key on the top-level section.
 function N:Set(path, value)
     local node = self.db
     local keys = { strsplit(".", path) }

@@ -1,0 +1,133 @@
+local _, ns = ...
+local N = ns.N
+
+-- Hides Blizzard's party / raid frames: alpha 0 and mouse off on the containers (no taint), secure post-hooks
+-- when Blizzard shows them again, events stripped from the hidden CompactUnitFrames. Party and raid are independent.
+
+local HB = {}
+N.HideBlizzard = HB
+
+local hooked = false
+
+local function try(fn) pcall(fn) end
+
+local function conceal(frame, hide)
+    if not frame then return end
+    try(function() frame:SetAlpha(hide and 0 or 1) end)
+    if not frame.EnableMouse then return end
+    -- EnableMouse on a protected frame (the raid container) is blocked in combat: wait.
+    if InCombatLockdown() and frame:IsProtected() then
+        N.RunWhenSafe(function() try(function() frame:EnableMouse(not hide) end) end, "hb-mouse-" .. tostring(frame))
+    else
+        try(function() frame:EnableMouse(not hide) end)
+    end
+end
+
+-- Blizzard's compact frames draw a yellow selection / threat outline on the target. Hidden frames
+-- must not show it, so it is kept at alpha 0 (a pcall: those regions belong to protected frames).
+local function muteHighlights(frame)
+    if not frame then return end
+    for _, r in ipairs({ frame.selectionHighlight, frame.aggroHighlight }) do
+        if r and r.SetAlpha then try(function() r:SetAlpha(0) end) end
+    end
+end
+
+local function stripEvents(frame)
+    if frame and frame.UnregisterAllEvents then
+        try(function() frame:UnregisterAllEvents() end)
+    end
+end
+
+local function wantRaid() return N.db and N.db.raid.hideBlizzard end
+local function wantParty() return N.db and N.db.party.hideBlizzard end
+
+local function apply()
+    local hr, hp = wantRaid(), wantParty()
+
+    conceal(_G.CompactRaidFrameManager, hr or hp)
+    conceal(_G.CompactRaidFrameContainer, hr)
+    conceal(_G.CompactPartyFrame, hp)
+    conceal(_G.PartyFrame, hp)
+
+    for i = 1, 4 do
+        local f = _G["PartyMemberFrame" .. i]
+        conceal(f, hp)
+        if hp then stripEvents(f) end
+    end
+    for i = 1, 5 do
+        if hp then stripEvents(_G["CompactPartyFrameMember" .. i]) end
+        if hp then muteHighlights(_G["CompactPartyFrameMember" .. i]) end
+    end
+    for i = 1, 40 do
+        if hr then stripEvents(_G["CompactRaidFrame" .. i]) end
+        if hr then muteHighlights(_G["CompactRaidFrame" .. i]) end
+    end
+    for g = 1, 8 do
+        for m = 1, 5 do
+            if hr then stripEvents(_G["CompactRaidGroup" .. g .. "Member" .. m]) end
+        end
+    end
+end
+HB.Apply = apply
+
+local function deferApply()
+    C_Timer.After(0, apply)
+end
+
+local function installHooks()
+    if hooked then return end
+    hooked = true
+
+    for _, name in ipairs({ "CompactRaidFrameManager", "CompactRaidFrameContainer", "CompactPartyFrame" }) do
+        local f = _G[name]
+        if f and f.Show then hooksecurefunc(f, "Show", deferApply) end
+    end
+    if _G.CompactRaidFrameManager_UpdateShown then
+        hooksecurefunc("CompactRaidFrameManager_UpdateShown", deferApply)
+    end
+    for _, fn in ipairs({ "CompactUnitFrame_UpdateSelectionHighlight", "CompactUnitFrame_UpdateAggroHighlight" }) do
+        if _G[fn] then
+            hooksecurefunc(fn, function(frame)
+                local unit = frame and frame.unit
+                if type(unit) ~= "string" then return end
+                local isRaid = unit:find("^raid") ~= nil
+                local isParty = (unit:find("^party") ~= nil) or unit == "player"
+                if (isRaid and wantRaid()) or (isParty and wantParty()) then muteHighlights(frame) end
+            end)
+        end
+    end
+    -- New CompactUnitFrames register their events here, strip them on creation.
+    if _G.CompactUnitFrame_UpdateUnitEvents then
+        hooksecurefunc("CompactUnitFrame_UpdateUnitEvents", function(frame)
+            try(function()
+                local unit = frame and frame.unit
+                if type(unit) ~= "string" then return end
+                local isRaid = unit:find("^raid") ~= nil
+                local isParty = (unit:find("^party") ~= nil) or unit == "player"
+                if (isRaid and wantRaid()) or (isParty and wantParty()) then
+                    stripEvents(frame)
+                end
+            end)
+        end)
+    end
+end
+
+function HB.Init()
+    installHooks()
+    apply()
+
+    local watcher = CreateFrame("Frame")
+    for _, e in ipairs({
+        "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED",
+        "RAID_ROSTER_UPDATE", "PARTY_MEMBER_ENABLE", "PARTY_MEMBER_DISABLE",
+    }) do
+        N.SafeRegister(watcher, e)
+    end
+    watcher:SetScript("OnEvent", apply)
+
+    N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
+        if path == "party.hideBlizzard" or path == "raid.hideBlizzard" then
+            apply()
+        end
+    end)
+end

@@ -1,11 +1,8 @@
 local _, ns = ...
 local N = ns.N
 
--- Hides Blizzard's party / raid frames, more thoroughly than :Hide():
---  * alpha 0 and mouse off on the containers (no taint, survives Blizzard showing them again)
---  * secure post-hooks that re-apply when Blizzard shows them
---  * events stripped from the hidden CompactUnitFrames so they cost no CPU
--- Party and raid are independent (db.party.hideBlizzard / db.raid.hideBlizzard).
+-- Hides Blizzard's party / raid frames: alpha 0 and mouse off on the containers (no taint), secure post-hooks
+-- when Blizzard shows them again, events stripped from the hidden CompactUnitFrames. Party and raid are independent.
 
 local HB = {}
 N.HideBlizzard = HB
@@ -44,10 +41,7 @@ end
 local function wantRaid() return N.db and N.db.raid.hideBlizzard end
 local function wantParty() return N.db and N.db.party.hideBlizzard end
 
--- The ping display hooks the ping icon Blizzard builds into its hidden compact frames, which only
--- works while they still get events. Stripping events is just a CPU saving, so it gives way.
--- Turning ping on after events were stripped needs a /reload, there is no clean way to restore
--- only the original events.
+-- Stripping events only saves CPU, so it gives way to the ping display; turning ping on afterwards needs a /reload.
 local function pingWantsEvents() return N.db and N.db.ping and N.db.ping.enabled end
 
 local function apply()
