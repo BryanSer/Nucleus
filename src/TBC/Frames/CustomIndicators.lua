@@ -5,9 +5,8 @@ local A = N.Auras
 local Indicators = N.Indicators
 local IsSecret = N.IsSecret
 
--- Custom indicators: built in Options > Indicators > "+". Each watches a spell list on every unit frame and
--- shows while one is present. Types: icon / icons, text, rect, color, bar, glow, border, overlay. Entries live
--- in N.db[group].customIndicators. Matching needs the spell ID (nothing matches while the game hides it).
+-- Custom indicators: each entry watches spell IDs on every unit frame and shows while one is present
+-- (N.db[group].customIndicators).
 
 local CI = {}
 N.CustomIndicators = CI
@@ -29,6 +28,7 @@ function CI.NewEntry(kind, name)
         size = 16, max = 3, spacing = 1, perRow = 8, lineSpacing = 1, growth = "LEFT",
         showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = false,
         timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1,
+        stackPoint = "BOTTOMRIGHT", timePoint = "CENTER",
         textKind = "fixed", text = "{stacks}", fontSize = 12,
         width = 12, height = 12,
         thickness = 2, opacity = 0.35, around = "frame", -- border: "frame" | "health"
@@ -44,8 +44,8 @@ function CI.NewEntry(kind, name)
     return e
 end
 
--- Suggestions for the options: healing buffs plus the defensive, external and offensive cooldown
--- lists, all classes (the options list the player's own class first). Debuffs have none.
+-- Suggestions for the options: healing buffs plus the defensive, external and offensive cooldown lists, all
+-- classes.
 function CI.Suggestions(aura)
     local out = {}
     if aura == "debuff" then
@@ -84,7 +84,6 @@ local function parseList(str)
     return set
 end
 
--- Matching auras
 
 -- Spells that custom indicators with "remove from Buffs" claim for themselves:
 -- the Buffs row skips them. Returns a set, or nil when there are none.
@@ -104,8 +103,6 @@ function CI.BuffExclusions(groupKey)
     return out
 end
 
--- Who must have cast the aura: "me", "others" (anyone but me) or "all". Older entries only have
--- the `mine` flag.
 local function castBy(e) return e.castBy or (e.mine and "me" or "all") end
 
 local SAMPLE_ICONS = { 135953, 136041, 135987 }
@@ -138,7 +135,6 @@ local function collect(b, e, out)
     end
 end
 
--- Widgets, one set per entry and unit button
 
 local function anchorOf(b, e, frame, extraX, extraY)
     local ax, ay = A.EdgeSign(e.point)
@@ -150,7 +146,6 @@ local function rgb(e) local c = e.color or { 1, 1, 1 } return c[1], c[2], c[3] e
 
 local builders = {}
 
--- icon / icons -----------------------------------------------------------------
 builders.icon = function(b)
     local w = { icons = {} }
     function w.show(e, auras)
@@ -170,7 +165,6 @@ builders.icon = function(b)
 end
 builders.icons = builders.icon
 
--- text -------------------------------------------------------------------------
 builders.text = function(b)
     local w = {}
     w.fs = N.FontString(b.overlay, 12)
@@ -268,7 +262,6 @@ builders.text = function(b)
     return w
 end
 
--- rect -------------------------------------------------------------------------
 -- A block behaves like a spell icon, just filled with a color instead of the spell picture:
 -- cooldown animation, remaining time and stacks all work.
 builders.rect = function(b)
@@ -287,7 +280,6 @@ builders.rect = function(b)
     return w
 end
 
--- color ------------------------------------------------------------------------
 -- A colored area: one color, the unit's class color, or a gradient of two.
 -- Returns mode ("solid" | "gradient-v" | "gradient-h"), first color, second color.
 function CI.ResolveColor(e, unit, classToken)
@@ -368,7 +360,6 @@ builders.color = function(b)
     return w
 end
 
--- bar --------------------------------------------------------------------------
 builders.bar = function(b)
     local w = {}
     w.frame = CreateFrame("Frame", nil, b.overlay)
@@ -399,7 +390,6 @@ builders.bar = function(b)
     return w
 end
 
--- border -----------------------------------------------------------------------
 builders.border = function(b)
     local w = { edges = {} }
     for i = 1, 4 do
@@ -421,7 +411,6 @@ builders.border = function(b)
     return w
 end
 
--- overlay ----------------------------------------------------------------------
 builders.overlay = function(b)
     local w = {}
     w.tex = b.overlay:CreateTexture(nil, "ARTWORK", nil, 4)
@@ -437,7 +426,6 @@ builders.overlay = function(b)
     return w
 end
 
--- glow -------------------------------------------------------------------------
 -- Glow around the whole frame from plain textures and animations: pixel (running lines), halo (pulsing glow),
 -- pulse (pulsing border).
 local PROC_ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
@@ -458,7 +446,6 @@ end
 builders.glow = function(b)
     local w = {}
     w.frame = CreateFrame("Frame", nil, b)
-    -- Above the bars, below the texts and icons (which live on b.overlay).
     w.frame:SetFrameLevel(math.max(0, b.overlay:GetFrameLevel() - 1))
     w.frame:SetAllPoints(b)
     w.frame:Hide()
@@ -469,7 +456,6 @@ builders.glow = function(b)
         local style = e.glow or "pixel"
         local sig = table.concat({ style, r, g, bl, e.offset or 0, e.thickness or 2, e.speed or 0.3, e.length or 8,
             math.floor(b:GetWidth() or 0), math.floor(b:GetHeight() or 0) }, "|")
-        -- Aura events call this often: a running glow is left alone.
         if w.sig == sig and w.frame:IsShown() then return end
         w.sig = sig
         w.frame:Show()
@@ -492,7 +478,6 @@ local function widgetFor(b, obj, e)
     return w
 end
 
--- Indicator hook
 
 Indicators.Register("custom", {
     events = {}, -- redrawn by the aura cache (below) once it is current

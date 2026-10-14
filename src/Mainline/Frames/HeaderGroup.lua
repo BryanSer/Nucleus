@@ -74,9 +74,8 @@ HG.StyleChildren = styleChildren
 
 local CLASS_ORDER = "DEATHKNIGHT,DEMONHUNTER,DRUID,EVOKER,HUNTER,MAGE,MONK,PALADIN,PRIEST,ROGUE,SHAMAN,WARLOCK,WARRIOR"
 
--- Translates the orientation/reverse settings into the header's anchor attributes.
---   vertical    unit rows stacked, extra groups form columns to the right
---   horizontal  unit columns side by side, extra groups stack downward
+-- Translates the orientation / reverse settings into the header's anchor attributes (vertical: groups form
+-- columns to the right; horizontal: groups stack downward).
 local function applyFlow(header, cfg)
     if cfg.orientation == "horizontal" then
         header:SetAttribute("point", cfg.reverse and "RIGHT" or "LEFT")
@@ -92,7 +91,6 @@ local function applyFlow(header, cfg)
     header:SetAttribute("columnSpacing", cfg.columnSpacing or cfg.spacing)
 end
 
--- Pets / companions
 
 local NPC_SLOTS = 4
 
@@ -182,8 +180,8 @@ local function placeInContainer(container, buttons, cfg, count)
     else container:SetSize(w, n * h + (n - 1) * sp) end
 end
 
--- Custom order (Appearance > Layout > Sorting): the header can't put chosen people first, so the roster is
--- ordered here and handed over as a name list (NAMELIST); out of combat only.
+-- Custom order: the header can't put chosen people first, so the roster is ordered here and handed over as a
+-- name list (out of combat).
 
 -- Role ranks (1 = first) and pinned names; nil when the custom order is off.
 local function sortConfig(key)
@@ -213,7 +211,6 @@ local function nativeRoleOrder(key)
     return ("%s,%s,%s,NONE"):format(o.first or "TANK", o.second or "HEALER", o.third or "DAMAGER")
 end
 
--- nil when the default (native) ordering is wanted, else the ordered name list.
 local function customNameList(key)
     local rank, pins = sortConfig(key)
     if not rank or #pins == 0 then return nil end
@@ -237,8 +234,8 @@ local function customNameList(key)
         local group = inRaid and select(3, GetRaidRosterInfo(i)) or nil
         if UnitExists(u) and not (npcOut and isNpcUnit(u)) and (not group or raidGroupAllowed(group)) then
             local full = GetUnitName(u, true)
-            -- A name the client does not know yet ("Unknown"): ordering by it would be wrong, so
-            -- keep the native order until UNIT_NAME_UPDATE brings the real names.
+            -- A name the client doesn't know yet would order wrongly: keep the native order until
+            -- UNIT_NAME_UPDATE.
             if full == _G.UNKNOWNOBJECT or full == _G.UNKNOWN then return nil end
             if full and full ~= "" then
                 local role = UnitGroupRolesAssigned(u)
@@ -269,7 +266,6 @@ local function customNameList(key)
     return table.concat(names, ",")
 end
 
--- Attaching pets to their owner's frame ---------------------------------------
 
 local SIDES = {
     RIGHT = { "TOPLEFT", "TOPRIGHT" }, LEFT = { "TOPRIGHT", "TOPLEFT" },
@@ -286,7 +282,6 @@ local function findOwnerButton(ownerUnit)
                     if child:IsShown() then
                         local u = child:GetAttribute("unit")
                         if u == ownerUnit then return child end
-                        -- The player is "playerN" / "raidN" depending on the header.
                         if pass == 2 and ownerUnit == "player" and u and UnitIsUnit(u, "player") then
                             return child
                         end
@@ -314,8 +309,7 @@ end
 
 HG.AttachTo = attachTo
 
--- Pets of group members, each bound to its owner's frame: one secure button per possible pet
--- (party1-4 / raid1-40), each shows itself while its pet exists.
+-- Pets of group members: one secure button per possible pet, each shows itself while its pet exists.
 local ATTACH_PARTY, ATTACH_RAID = 4, 40
 
 local function createAttachedPets()
@@ -385,8 +379,6 @@ local function configurePetContainer(container)
     local cfg = N.db[key]
     local count, order = 1, container.buttons
     if key == "npc" then
-        -- Party-member companions first (slots assigned here, out of combat),
-        -- then the friendly boss-unit NPCs (shown by a secure unit condition).
         local units = {}
         for i = 1, 4 do
             if companionsMoved() and isNpcUnit("party" .. i) then units[#units + 1] = "party" .. i end
@@ -428,7 +420,6 @@ local function configurePetContainer(container)
     container:ClearAllPoints()
     local host = key == "npc" and cfg.attachEnabled and ((IsInRaid() and N.headers.raid) or N.headers.party or N.headers.raid)
     if host then
-        -- Next to the group frames (the raid frames in a raid), following them.
         local s = SIDES[cfg.attachSide] or SIDES.RIGHT
         local gap, shift = cfg.attachGap or 2, cfg.attachShift or 0
         local x, y = gap, shift
@@ -521,7 +512,6 @@ local function configure(header)
             header:SetAttribute("groupBy", "ASSIGNEDROLE")
         end
 
-        -- Only the chosen raid groups (the explicit name list below does its own filtering).
         local wanted = {}
         for g = 1, 8 do
             if raidGroupAllowed(g) then wanted[#wanted + 1] = g end
@@ -540,13 +530,11 @@ local function configure(header)
 
     placeHeader(header, key, cfg)
 
-    -- Size first: the header update sizes itself from its children.
     applyChildSize(header)
     if SecureGroupHeader_Update then
         SecureGroupHeader_Update(header)
     end
     styleChildren(header)
-    -- Child creation can lag a frame behind the attribute write.
     C_Timer.After(0, function() styleChildren(header) end)
     if key == "groupPets" then applyGroupPetsMode() end
 end
@@ -567,8 +555,6 @@ local applyVisibility
 local function createHeader(key)
     local name = "NucleusHeader" .. (key:gsub("^%l", string.upper))
     if key == "ownPet" or key == "npc" or key == "spotlight" then
-        -- One plain container with its own secure unit buttons: the pet is
-        -- always "pet", NPC companions are party1-4 (assigned as they appear).
         local c = CreateFrame("Frame", name, UIParent)
         c.groupKey = key
         c:SetMovable(true)
@@ -584,8 +570,6 @@ local function createHeader(key)
             c.buttons[i] = b
         end
         if key == "npc" then
-            -- Friendly NPCs the game exposes as boss units (escorts, allies in
-            -- encounters). Each button shows itself while its unit is friendly.
             c.bossButtons = {}
             for i = 1, 8 do
                 local b = CreateFrame("Button", name .. "UnitButton" .. (NPC_SLOTS + i), c, "SecureUnitButtonTemplate")
@@ -648,8 +632,6 @@ applyVisibility = function(header)
     end
     local key = N.HeaderKey(header)
     if key == "ownPet" then
-        -- The pet button shows only while a pet exists; the container (and with
-        -- it the drag handle) stays up.
         header:Show()
         RegisterStateDriver(header.buttons[1], "visibility", "[@pet,exists] show; hide")
         return
@@ -690,8 +672,6 @@ function HG.Init()
                 styleChildren(header)
             end
         end
-        -- NPC companions: reassign their frames and re-filter the party frames
-        -- (only when the NPC list actually changed).
         if companionsMoved() then
             local sig = tostring(partyNameFilter())
             if sig ~= lastFilter then
@@ -713,7 +693,6 @@ function HG.Init()
             end, "spotlight-roster")
         end
     end)
-    -- The NPC frames hang on the party frames or the raid frames: re-anchor when that changes.
     local lastInRaid
     rosterFrame:HookScript("OnEvent", function()
         local r = IsInRaid() and true or false
@@ -746,7 +725,6 @@ function HG.Init()
     end)
 end
 
--- Option changes: the header only cares about layout, size and visibility.
 N:On("NUCLEUS_SETTING_CHANGED", function(_, section, path)
     if not N.GROUP_KEYS[section] then return end
     if path and (path:find("%.indicators%.") or path:find("%.appearance%.") or path:find("%.auras%.") or path:find("%.customIndicators")) then return end

@@ -1,9 +1,8 @@
 local _, ns = ...
 local N = ns.N
 
--- Everything specific to this game version: the classes, what each can dispel, the spell lists of the aura
--- rows, the raid buffs to check and the potions Actions reacts to. Spell IDs are Classic, rank by rank; a rank
--- the client doesn't know is dropped at load (N.Classic.Known).
+-- Everything specific to this game version: classes, dispel types, aura-row spell lists, raid buffs and Actions
+-- potions. Spell IDs are per rank; a rank the client doesn't know is dropped at load (N.Classic.Known).
 
 N.IS_CLASSIC = true
 local C = {}
@@ -117,9 +116,8 @@ C.LIST = {
     buffs = csv(C.healingList),
 }
 
--- Raid buffs (Missing Buffs). `ids` = every spell that puts the buff on a member (all ranks, group version, NPC
--- and item casts); `cast` = the ranks the player trains plus the group version ("the player can cast it");
--- `icon` = the spell whose icon stands for the buff; `class` = who provides it.
+-- Raid buffs (Missing Buffs): `ids` = every spell that applies the buff, `cast` = the ranks the player can cast
+-- (incl. group version), `icon` = the spell whose icon stands for it, `class` = who provides it.
 local FAMILY = {
     fort = { ids = { 1243, 1244, 1245, 2791, 10937, 10938, 10939, 10940, 13864, 23947, 23948, 21562, 21564, 450086 },
              cast = { 1243, 1244, 1245, 2791, 10937, 10938, 21562, 21564 } },
@@ -199,9 +197,8 @@ C.ACTIONS = {
     { spell = 6262,  anim = "sweep", color = { 0.40, 1.00, 0.00 } }, -- Healthstone
 }
 
--- Numbers: Classic health values are small, so nothing under 10,000 is abbreviated (9999 stays
--- "9999", 12345 reads "12.3K"). The client's AbbreviateNumbers does the work with these tiers, so
--- a hidden (secret) number stays safe.
+-- Numbers: Classic health values are small, so nothing under 10,000 is abbreviated; AbbreviateNumbers does the
+-- work with these tiers, so hidden numbers stay safe.
 local abbrevOpts
 function N.Abbreviate(n)
     if abbrevOpts == nil then

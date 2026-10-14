@@ -4,10 +4,8 @@ local M = N.Media
 local L = N.L
 local IsSecret = N.IsSecret
 
--- Targeted Spell Bars: one floating, movable stack of cast bars, one per casting enemy nameplate. It doesn't work
--- out which of our frames a cast is aimed at (unreliable with secret values); the target is read through the
--- secret-safe Blizzard APIs and handed straight to SetText / SetTextColor. Own container, settings
--- (N.db.targetedSpellBars) and options page, so not an Indicators.Register entry.
+-- Targeted Spell Bars: a floating, movable stack of cast bars, one per casting enemy nameplate. The target
+-- comes from secret-safe Blizzard APIs and goes straight to SetText / SetTextColor.
 
 local TSB = {}
 N.TargetedSpellBars = TSB
@@ -34,7 +32,6 @@ local DIR_REMAINING = Enum_ and Enum_.StatusBarTimerDirection and Enum_.StatusBa
 
 local PREVIEW = "__preview"
 
--- config
 
 local function GetConfig()
     return N.db and N.db.targetedSpellBars
@@ -54,7 +51,6 @@ local function WhereAllows(cfg)
     return true -- "both": raid, party, or solo
 end
 
--- state
 
 local container
 local bars = {}
@@ -69,7 +65,6 @@ local function barSize(cfg)
     return cfg.width or 220, cfg.height or 22
 end
 
--- container + mover
 
 local function SavePosition()
     local cfg = GetConfig()
@@ -98,8 +93,6 @@ local function EnsureContainer()
     container:EnableMouse(false)
     container:Hide()
 
-    -- Drag handle floating above the stack: its own drag scripts move the
-    -- container, so grabbing the label (not just the bars) works.
     local handle = CreateFrame("Frame", nil, container)
     handle:SetPoint("BOTTOM", container, "TOP", 0, 4)
     handle:SetSize(150, 20)
@@ -142,7 +135,6 @@ local function SyncMover()
     if not want and not active and not previewOn then container:Hide() end
 end
 
--- bar pool
 
 local function BuildBar()
     local c = EnsureContainer()
@@ -198,7 +190,6 @@ local function AcquireBar()
     return b
 end
 
--- style / layout
 
 local function StyleBar(holder, cfg)
     local w, h = barSize(cfg)
@@ -260,7 +251,6 @@ local function Reflow(cfg)
     end
 end
 
--- important-cast colour marking
 
 -- `important` can be a secret boolean: never truth-test it, hand it to the color sink.
 local function ApplyImportantVisual(holder, cfg, important)
@@ -279,7 +269,6 @@ local function ApplyImportantVisual(holder, cfg, important)
     end
 end
 
--- release
 
 local function Release(unit, cfg)
     castGen[unit] = (castGen[unit] or 0) + 1 -- invalidates any deferred ApplyCast still pending
@@ -317,7 +306,6 @@ local function SortShown()
     table.sort(shown, function(a, b) return a.startTime < b.startTime end)
 end
 
--- per-cast tick
 
 -- Only the synthetic preview entry computes a fraction by hand (fake times, so plain math is
 -- safe). Real casts are driven natively by :SetTimerDuration() in ApplyCast.
@@ -387,10 +375,8 @@ local function ClassifyCast(spellId)
     return important
 end
 
--- Cast lifecycle. Never do arithmetic on UnitCastingInfo / UnitChannelInfo times (secret on enemy nameplates):
--- progress comes from UnitCastingDuration / UnitChannelDuration / UnitEmpoweredChannelDuration through the
--- StatusBar's :SetTimerDuration(). Name and icon go straight to SetText / SetTexture. CreateFrame and SetSize are
--- deferred a tick so they never run in the same execution as those reads.
+-- Cast lifecycle: progress comes from the *Duration functions through :SetTimerDuration(), never from
+-- arithmetic on the secret cast times; frame work is deferred a tick.
 
 local function ResolveDuration(unit)
     local duration, isEmpowered
@@ -482,8 +468,6 @@ local function StartCast(unit, cfg, eventSpellId)
 
         local spellId = eventSpellId
         if spellId == nil then
-            -- No event payload (adopted from an already-casting nameplate):
-            -- read it positionally, never combined with name/texture reads.
             if isChannel then
                 spellId = select(8, UnitChannelInfo(unit))
             else
@@ -494,7 +478,6 @@ local function StartCast(unit, cfg, eventSpellId)
         local important = ClassifyCast(spellId)
         local duration, isEmpowered = ResolveDuration(unit)
 
-        -- ApplyCast does the frame work on its own tick, never in the execution that read the cast info.
         C_Timer.After(0, function()
             if castGen[unit] ~= myGen then return end
             ApplyCast(unit, cfg, myGen, isChannel, isEmpowered, important, duration, spellId)
@@ -502,7 +485,6 @@ local function StartCast(unit, cfg, eventSpellId)
     end)
 end
 
--- events
 
 local eventFrame = CreateFrame("Frame")
 eventFrame:Hide()
@@ -642,7 +624,6 @@ local function SyncActive()
     SyncMover()
 end
 
--- settings entry points
 
 function TSB.Refresh()
     SyncActive()
@@ -711,7 +692,6 @@ end
 
 function TSB.IsPreviewing() return previewOn end
 
--- wiring
 
 local watcher = CreateFrame("Frame")
 watcher:RegisterEvent("GROUP_ROSTER_UPDATE")

@@ -6,8 +6,7 @@ local M = N.Media
 local WHITE = "Interface/Buttons/WHITE8X8"
 
 -- Frame-wide glows (custom indicator Glow, preview): only what the game animates itself, no Lua per frame.
--- pulse (fading ring), halo (soft glow), pixel (dashes marching round the edge).
--- E.NewGlow(parent, anchor) -> g; g:Show(style, r, g, b, offset, thickness, speed, length); g:Hide()
+-- E.NewGlow(parent, anchor) -> g; g:Show(style, r, g, b, offset, thickness, speed, length).
 local PROC_ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
 
 local function loopingAlpha(region, duration)

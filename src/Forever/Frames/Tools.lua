@@ -4,9 +4,8 @@ local M = N.Media
 local L = N.L
 local IsSecret = N.IsSecret
 
--- Utilities: three free-standing, movable displays with their own settings (N.db.tools.*): readyPull (Ready Check
--- + Pull Timer), battleRes (charges and recharge timer), marks (target / world marker bar). Draggable, and always
--- shown, while "Move tools" is on.
+-- Utilities: three movable displays with their own settings (N.db.tools.*): readyPull (Ready Check + Pull
+-- Timer), battleRes, marks (target / world marker bar). Always shown while "Move tools" is on.
 
 local T = {}
 N.Tools = T
@@ -90,7 +89,6 @@ local function makeHost(key, title)
     return host
 end
 
--- Ready Check + Pull Timer
 
 local rp
 local pullEnd, pullTotal
@@ -215,7 +213,6 @@ local function onCountdown(_, total)
     if rp then rp.pull.bar:Show() end
 end
 
--- Battle Res
 
 local br
 local BR_SPELL = 20484 -- Rebirth: its charge pool is the raid's shared one
@@ -313,10 +310,8 @@ function T.UpdateBattleRes()
     end
 end
 
--- Marks bar
 
 local mk
--- World marker button j shows the matching raid-target icon.
 local WORLD_TO_ICON = { 6, 4, 3, 7, 1, 2, 5, 8 }
 
 local function setIcon(tex, i)
@@ -419,7 +414,6 @@ local function updateMarks()
     end
 end
 
--- wiring
 
 function T.Refresh()
     if not N.db or not N.db.tools then return end

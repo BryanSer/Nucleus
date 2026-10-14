@@ -2,9 +2,8 @@ local _, ns = ...
 local N = ns.N
 local M = N.Media
 
--- On-frame aura rows: buffs, debuffs, dispels, defensives, externals, offensives, crowd controls, plus the
--- private-aura anchors. Midnight can hide aura fields: cooldowns run from the duration object, spell IDs are
--- checked with IsSecret, and the cooldown rows fall back to Blizzard's filters when an ID is hidden.
+-- On-frame aura rows (buffs, debuffs, dispels, defensives, externals, offensives, crowd controls, private
+-- auras). Hidden fields: cooldowns run from the duration object, spell IDs are checked with IsSecret.
 
 local A = {}
 N.Auras = A
@@ -26,8 +25,8 @@ local ROWS = {
 }
 A.ROWS = ROWS
 
--- Aura cache: in combat a live scan is refused but lookups by instance ID work, so each unit's auras are
--- cached from a scan plus the UNIT_AURA payload; rows classify with IsAuraFilteredOutByInstanceID.
+-- Aura cache: in combat a live scan is refused but lookups by instance ID work, so auras are cached from a scan
+-- plus the UNIT_AURA payload.
 
 local AC = {}
 N.AuraCache = AC
@@ -107,8 +106,7 @@ acFrame:SetScript("OnEvent", function(_, event, unit)
     notify(unit)
 end)
 
--- Class dispel capability. Class level only; spec nuance is ignored (a few types are only usable
--- in a healing spec).
+-- Class dispel capability; class level only, spec nuance is ignored.
 
 local DISPEL_BY_CLASS = N.Classic.DISPEL
 local dispelSet
@@ -137,7 +135,6 @@ local function parseList(str)
     return set
 end
 
--- Icon construction
 
 -- Snaps UI units to whole pixels at the frame's scale, so 1px borders look even on every side.
 local function snap(frame, v)
@@ -173,8 +170,8 @@ local function makeIcon(parent)
     if cd.SetSwipeColor then cd:SetSwipeColor(0, 0, 0, 0.6) end
     f.cd = cd
 
-    -- "Top to bottom" style: a dark mask growing down from the top edge as the aura runs out (a
-    -- vertical StatusBar fed with elapsed time).
+    -- "Top to bottom" style: a dark mask growing down as the aura runs out (a vertical StatusBar fed with
+    -- elapsed time).
     local mask = CreateFrame("StatusBar", nil, f)
     mask:SetPoint("TOPLEFT", f, "TOPLEFT", snap(f, 1), snap(f, -1))
     mask:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", snap(f, -1), snap(f, 1))
@@ -197,7 +194,6 @@ local function makeIcon(parent)
     return f
 end
 
--- Data
 
 -- True if the aura passes one of the filters the rows ask for. The client has no classification
 -- filters; what it does answer (cast by me, dispellable by my class) is decided here.
@@ -209,7 +205,6 @@ local function passesFilter(_, d, filter)
     return false
 end
 
--- Debuff filters: yes/no questions about one aura; the token-based ones work with hidden fields.
 local DISPEL_TYPED = { Magic = true, Curse = true, Disease = true, Poison = true, Bleed = true }
 local DEBUFF_FILTERS = {
     { key = "nonplayer", test = function(unit, d)
@@ -225,8 +220,7 @@ local DEBUFF_FILTERS = {
 }
 A.DEBUFF_FILTERS = DEBUFF_FILTERS
 
--- Who may have cast a debuff on the Debuffs row: "all", "npc" (not a player or a player's pet),
--- "me" or "others" (anyone but me). Older settings only have the onlyNonPlayer switch.
+-- Who may have cast a debuff on the Debuffs row: "all", "npc", "me" or "others".
 local function debuffCastBy(cfg)
     if cfg.castBy then return cfg.castBy end
     return (cfg.onlyNonPlayer ~= false) and "npc" or "all"
@@ -325,19 +319,24 @@ local MOCK_SOURCE = {
 local function mockCollect(mock, row, cfg, out)
     local src = mock[MOCK_SOURCE[row.kind] or "debuffs"]
     if not src then return end
-    -- Crowd control and offensive cooldowns show a single sample spell.
     local limit = (row.kind == "crowd" or row.kind == "offensive") and 1 or cfg.max
     for i = 1, math.min(#src, limit) do out[#out + 1] = src[i] end
 end
 
--- Rendering
 
 local GOLD  = { 1.00, 0.85, 0.00 }
 local MINE  = { 0.00, 0.80, 0.00 }
 local CROWD = { 0.90, 0.20, 0.20 }
 
--- Time text (Appearance > Time text): warning color below N seconds, tenths below M. Readable timing is
--- compared; hidden timing uses step curves over the duration object.
+-- Time text: warning color below N seconds, tenths below M; hidden timing uses step curves over the duration
+-- object.
+local TEXT_WHITE = { 1, 1, 1 }
+local function placeText(fs, icon, point, x, y)
+    fs:ClearAllPoints()
+    fs:SetPoint(point, icon, point, x, y)
+    fs:SetJustifyH(point:find("LEFT") and "LEFT" or point:find("RIGHT") and "RIGHT" or "CENTER")
+end
+
 local tracked = setmetatable({}, { __mode = "k" })
 local tcCurves = {}
 
@@ -354,11 +353,12 @@ local function curveOf(key, build)
     end
 end
 
--- red below `sec`, white above
-local function warnCurve(sec, c)
-    return curveOf(("w|%d|%.2f|%.2f|%.2f"):format(sec, c[1], c[2], c[3]), function(cv)
+local function warnCurve(sec, c, base)
+    base = base or TEXT_WHITE
+    local key = ("w|%d|%.2f|%.2f|%.2f|%.2f|%.2f|%.2f"):format(sec, c[1], c[2], c[3], base[1], base[2], base[3])
+    return curveOf(key, function(cv)
         cv:AddPoint(0, CreateColor(c[1], c[2], c[3], 1))
-        cv:AddPoint(sec, CreateColor(1, 1, 1, 1))
+        cv:AddPoint(sec, CreateColor(base[1], base[2], base[3], 1))
     end)
 end
 
@@ -386,7 +386,8 @@ local function tickTime(icon)
 
     if icon._tcExp then
         local left = icon._tcExp - GetTime()
-        local r, g, b = 1, 1, 1
+        local base = icon._tcBase or TEXT_WHITE
+        local r, g, b = base[1], base[2], base[3]
         if icon._tcOn and left > 0 and left < icon._tcSec then r, g, b = c[1], c[2], c[3] end
         if dec > 0 and dfs and left > 0 and left < dec then
             dfs:SetFormattedText("%.1f", left)
@@ -400,7 +401,8 @@ local function tickTime(icon)
         end
     elseif icon._tcDur then
         local dur = icon._tcDur
-        local r, g, b = 1, 1, 1
+        local base = icon._tcBase or TEXT_WHITE
+        local r, g, b = base[1], base[2], base[3]
         if icon._tcOn and icon._tcCurve then
             local ok, col = pcall(dur.EvaluateRemainingDuration, dur, icon._tcCurve)
             local rr, gg, bb = rgba(ok and col)
@@ -437,7 +439,11 @@ tcDriver:SetScript("OnUpdate", function(_, dt)
             tickTime(icon)
         else
             tracked[icon] = nil
-            if icon._timeFS then icon._timeFS:SetTextColor(1, 1, 1, 1); icon._timeFS:SetAlpha(1) end
+            if icon._timeFS then
+                local bc = icon._tcBase or TEXT_WHITE
+                icon._timeFS:SetTextColor(bc[1], bc[2], bc[3], 1)
+                icon._timeFS:SetAlpha(1)
+            end
             if icon._decFS then icon._decFS:Hide() end
         end
     end
@@ -453,7 +459,11 @@ end
 local function untrackTime(icon)
     if not tracked[icon] then return end
     tracked[icon] = nil
-    if icon._timeFS then icon._timeFS:SetTextColor(1, 1, 1, 1); icon._timeFS:SetAlpha(1) end
+    if icon._timeFS then
+                local bc = icon._tcBase or TEXT_WHITE
+                icon._timeFS:SetTextColor(bc[1], bc[2], bc[3], 1)
+                icon._timeFS:SetAlpha(1)
+            end
     if icon._decFS then icon._decFS:Hide() end
 end
 
@@ -479,8 +489,7 @@ local function setupTimeColor(icon, d, cfg, unit)
             icon._decFS:Hide()
         end
         icon._decFS:SetFont(M.font, cfg.timeSize or 10, "OUTLINE")
-        icon._decFS:ClearAllPoints()
-        icon._decFS:SetPoint("CENTER", icon, "CENTER", cfg.timeX or 0, cfg.timeY or 0)
+        placeText(icon._decFS, icon, cfg.timePoint or "CENTER", cfg.timeX or 0, cfg.timeY or 0)
     elseif icon._decFS then
         icon._decFS:Hide()
     end
@@ -492,7 +501,7 @@ local function setupTimeColor(icon, d, cfg, unit)
         local ok, obj = pcall(C_UnitAuras.GetAuraDuration, unit, d.auraInstanceID)
         if ok and obj then
             icon._tcDur = obj
-            if tc.enabled then icon._tcCurve = warnCurve(sec, icon._tcColor) end
+            if tc.enabled then icon._tcCurve = warnCurve(sec, icon._tcColor, icon._tcBase) end
             if dec > 0 then
                 icon._decOn = decCurve(dec, false)
                 icon._decOff = decCurve(dec, true)
@@ -502,12 +511,13 @@ local function setupTimeColor(icon, d, cfg, unit)
     tracked[icon] = true
     tickTime(icon)
 end
--- Font size/position of the stack count and the countdown text (the cooldown frame's own
--- FontString, found among its regions).
+-- Stack count and countdown font size / position (the cooldown frame's FontString is found among its regions).
 local function styleTexts(icon, cfg)
     icon.count:SetFont(M.font, cfg.stackSize or 10, "OUTLINE")
-    icon.count:ClearAllPoints()
-    icon.count:SetPoint("BOTTOMRIGHT", icon, "BOTTOMRIGHT", cfg.stackX or 1, cfg.stackY or -1)
+    placeText(icon.count, icon, cfg.stackPoint or "BOTTOMRIGHT", cfg.stackX or 1, cfg.stackY or -1)
+    local stackColor = cfg.stackColor or TEXT_WHITE
+    icon.count:SetTextColor(stackColor[1], stackColor[2], stackColor[3], 1)
+    icon._tcBase = cfg.timeBaseColor or TEXT_WHITE
     if icon._timeFS == nil then
         icon._timeFS = false
         for _, r in ipairs({ icon.cd:GetRegions() }) do
@@ -517,8 +527,8 @@ local function styleTexts(icon, cfg)
     local fs = icon._timeFS
     if fs then
         fs:SetFont(M.font, cfg.timeSize or 10, "OUTLINE")
-        fs:ClearAllPoints()
-        fs:SetPoint("CENTER", icon, "CENTER", cfg.timeX or 0, cfg.timeY or 0)
+        placeText(fs, icon, cfg.timePoint or "CENTER", cfg.timeX or 0, cfg.timeY or 0)
+        fs:SetTextColor(icon._tcBase[1], icon._tcBase[2], icon._tcBase[3], 1)
     end
 end
 
@@ -662,7 +672,6 @@ local function typeCurve()
     return colorCurve
 end
 
--- Color of a dispel type: the player's pick, else the game's color / the fallback.
 local function typeColorOf(cfg, name)
     local own = cfg and type(cfg.typeColors) == "table" and cfg.typeColors[name]
     if type(own) == "table" and own[1] then return own end
@@ -819,8 +828,7 @@ local function updateFX(b, cfg, list, unit)
                         t:SetAtlas(atlas)
                         t:SetVertexColor(1, 1, 1, 1)
                     elseif dn == "Bleed" then
-                        -- Blizzard has no dispel-type symbol for bleeds, so Rupture's icon stands
-                        -- in.
+                        -- No dispel-type symbol exists for bleeds, so Rupture's icon stands in.
                         t:SetTexture(132302)
                         t:SetTexCoord(0.08, 0.92, 0.08, 0.92)
                         t:SetVertexColor(1, 1, 1, 1)
@@ -903,8 +911,7 @@ end
 
 A.MakeIcon = makeIcon
 A.ApplyAura = apply
--- Offset of the i-th icon of a row from the first. Horizontal rows wrap after perRow icons, new
--- lines grow away from the anchored edge; vertical rows are one column.
+-- Offset of the i-th icon of a row: horizontal rows wrap after perRow icons, vertical rows are one column.
 function A.SlotOffset(i, size, spacing, lineSpacing, perRow, growth, point)
     local idx = i - 1
     if growth == "UP" then return 0, idx * (size + spacing) end
@@ -954,9 +961,7 @@ function A.Create(b)
     for _, row in ipairs(ROWS) do b._nucAuras[row.kind] = {} end
 end
 
--- Events
 
--- The cache above is current by the time this runs (it calls us itself).
 AC.OnChange(function(unit)
     if not N.db or not N.UnitFrame then return end
     N.UnitFrame.ForEachButton(function(child)
@@ -976,8 +981,7 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
     end
 end)
 
--- /nucauras [unit]: what the client reports for a unit's auras (name, spell ID, caster), for bug
--- reports. Default unit: the target, else yourself.
+-- /nucauras [unit]: the unit's auras as the client reports them (default: target, else yourself).
 SLASH_NUCLEUSAURAS1 = "/nucauras"
 SlashCmdList.NUCLEUSAURAS = function(msg)
     local unit = strtrim(msg or "")

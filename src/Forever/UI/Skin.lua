@@ -9,7 +9,6 @@ local function unpackColor(c)
     return c[1], c[2], c[3], c[4] or 1
 end
 
--- Pixel-snapped anchoring so 1px lines rasterize to one physical pixel at any UI scale.
 local PU = PixelUtil or PixelUtil_Mixin
 local function px_point(region, ...)
     if PU and PU.SetPoint then PU.SetPoint(region, ...) else region:SetPoint(...) end
@@ -21,10 +20,7 @@ local function px_width(region, w)
     if PU and PU.SetWidth then PU.SetWidth(region, w) else region:SetWidth(w) end
 end
 
--- A single hairline separator on `parent`, snapped to one physical pixel.
---   dir "h": horizontal line at y = `off`; a/b inset its left/right ends.
---   dir "v": vertical line at x = `off`; a/b inset its top/bottom ends
---            (a measured down from the top, b measured up from the bottom).
+-- A single hairline separator on `parent`: dir "h" at y = off, "v" at x = off; a / b inset the ends.
 function N.Hairline(parent, dir, off, color, a, b)
     a, b = a or 0, b or 0
     local t = parent:CreateTexture(nil, "OVERLAY")
@@ -45,7 +41,6 @@ function N.Hairline(parent, dir, off, color, a, b)
     return t
 end
 
--- Matte panel look for any frame (4 edge lines + optional fill, reused). borderColor defaults to black.
 function N.SkinPanel(frame, fillColor, borderColor, noHighlight)
     if not frame._nucFill then
         local fill = frame:CreateTexture(nil, "BACKGROUND")
@@ -122,7 +117,6 @@ function N.SkinRound(frame, fillColor, borderColor, small)
     frame._nucFill:SetColorTexture(unpackColor(fillColor or M.color.card))
 end
 
--- Soft drop shadow: one 9-sliced texture that bleeds past the frame edge; `spread` is how far.
 function N.AddShadow(frame, spread, alpha, dy)
     spread = spread or 14
     local sh = frame:CreateTexture(nil, "BACKGROUND", nil, -8)
@@ -133,8 +127,6 @@ function N.AddShadow(frame, spread, alpha, dy)
     return sh
 end
 
--- A crisp X built from two rotated bars (no glyph, so it centres exactly).
--- Returns a function that tints both bars.
 function N.MakeCross(parent, size, thick)
     local bars = {}
     for i, rot in ipairs({ 45, -45 }) do
@@ -150,8 +142,6 @@ function N.MakeCross(parent, size, thick)
     end
 end
 
--- Control button: rounded, raised fill that lifts on hover, accent hold when
--- marked active. Adds btn:SetActiveState(bool).
 function N.SkinButton(btn, opts)
     opts = opts or {}
     local rest   = opts.rest   or M.color.base
@@ -202,9 +192,8 @@ function N.SkinBar(bar)
     end
 end
 
--- Swap a skinned bar's fill texture (Appearance > Color > Bar texture). Call
--- N.SkinBar first. The caller must re-apply SetStatusBarColor afterwards -
--- changing the texture resets the fill's tint to white.
+-- Swaps a skinned bar's fill texture; call N.SkinBar first and re-apply SetStatusBarColor afterwards (a texture
+-- change resets the tint).
 function N.SetBarTexture(bar, key)
     bar:SetStatusBarTexture(M.barTextures[key] or M.flat)
     local tex = bar:GetStatusBarTexture()
@@ -242,7 +231,6 @@ function N.ApplyFontScale()
             if kind then
                 obj:SetFont(font, obj._nucBase * scale, obj._nucFlags)
             else
-                -- frame text: keep the size the layout code gave it, only swap the face
                 local _, size, flags = obj:GetFont()
                 obj:SetFont(font, (size and size > 0) and size or obj._nucBase, flags or obj._nucFlags)
             end

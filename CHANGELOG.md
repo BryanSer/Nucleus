@@ -1,5 +1,17 @@
 # Nucleus Changelog
 
+## 1.0.3 (2026-10-14)
+
+- Stack and timer text of the aura rows and custom indicators: choose the anchor point and the text color.
+- Name: new Max characters option to shorten long names.
+- New Column spacing option for the raid and group pet frames: the gap between the columns (the raid groups), next to Spacing between the frames of a column.
+- Raid can use the Group's settings: in the Position tab, appearance, indicators, aura rows and custom indicators can each be shared between Group and Raid, so a change in one changes both.
+- New Position tab: where the frames sit (anchor point, X / Y, centering, attach to owner) and copying settings between Group and Raid; the General card with the move handle settings is called Move handles.
+- Block indicators show the cooldown animation, stack count and remaining time again (Retail, Forever).
+- Cell import: icon, text and row positions that use a different anchor on the indicator than on the frame, rectangular icon sizes, icons per line and spacing of custom icon rows, and the Spotlight size now convert correctly.
+- Fixed the Position of the icon indicators (Role, Class / Spec, Leader, Ready Check, Raid Marker, Status Icon, Combat Icon) and "Show all classes" of the Buffs row being reset after a reload.
+- Hide Blizzard frames also hides the raid / party preview frames in Edit Mode and frames that ignore their container's transparency; the new /nucblizz command lists what is still visible.
+
 ## 1.0.2 (2026-10-13)
 
 - Fixed the health bar gradient falling back to the class color while health is hidden; Fade at Full Health also works then.
@@ -11,8 +23,9 @@
 - Frame position: anchor point, X / Y values and centering per group; a middle anchor point grows the group from the middle.
 - Test Mode: a menu next to the button previews several groups at once, and the preview follows Group by and Sort.
 - Frames redraw right away when a group member leaves; Spotlight units can be moved up and down; Auto Switch has a Battleground (10) rule.
+- Fixed Attach to owner, the time text color and decimals, and the Glow distance being reset on every login.
 - Missing Buffs: Shadow Protection added, and each Blessing can be switched on or off. (Forever, Classic Era, TBC)
-- Smaller changes: one "Move tools" switch, Spotlight in Copy settings, larger group name offsets, X / Y names for Attach to owner, "Group" instead of "Party" in English, no duplicate movers in Test Mode; marker buttons set marks through /tm.
+- Smaller changes: one "Move tools" switch, Spotlight in Copy settings, larger group name offsets, X / Y names for Attach to owner, "Group" instead of "Party" in English, no duplicate movers in Test Mode, the language follows the game by default (it was German); marker buttons set marks through /tm.
 - Retail: NPC frames are on by default and show friendly boss units (such as the end boss of Temple of Sethraliss) next to the group frames; companions stay among the group frames unless "Move companions here" is on; new /nucnpc command.
 - First version of Classic Era and TBC support, so far tested only by the author: simpler than Retail and Forever (no ping, heal / shield prediction, private auras or targeted spell bars), spells match by name so every rank works, plus a Targeted Spells indicator that only exists there.
 

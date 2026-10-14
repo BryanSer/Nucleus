@@ -1,10 +1,8 @@
 local _, ns = ...
 local N = ns.N
 
--- Profiles: a profile holds the frame settings (party, raid, pets, spotlight, tooltip, click-casting, actions,
--- tools, ...); language, scale, highlight color and the lock state are account-wide. N.db is a proxy: profile
--- keys go to the active profile (or the shared copy, see scope below), the rest to the SavedVariables root.
--- A switch swaps the table and replays settings events.
+-- Profiles: a profile holds the frame settings; language, scale, highlight color and lock state are
+-- account-wide. N.db proxies profile keys to the active profile (or the shared copy).
 
 local P = {}
 N.Profiles = P
@@ -35,7 +33,6 @@ P.HIDE = HIDE
 local MAX_BACKUPS = 5
 local PREFIX = "!NUC:"
 
--- Situations the auto-switch tells apart, in display order.
 P.SITUATIONS = {
     { key = "solo",           label = "Solo" },
     { key = "party",          label = "Party" },
@@ -60,9 +57,22 @@ local function buildDefaults()
     for _, k in ipairs(P.KEYS) do profileDefaults[k] = N.Defaults[k] end
 end
 
+-- The parts of the Group's settings the Raid can share.
+P.LINK_CATEGORIES = { "appearance", "indicators", "auras", "customIndicators" }
+
+local function linkGroups(tbl)
+    local raid, party = tbl.raid, tbl.party
+    if type(raid) ~= "table" or type(party) ~= "table" or type(raid.link) ~= "table" then return end
+    for _, cat in ipairs(P.LINK_CATEGORIES) do
+        if raid.link[cat] == true and type(party[cat]) == "table" then raid[cat] = party[cat] end
+    end
+end
+
 local function normalizeProfile(tbl)
     N.PruneStale(tbl, profileDefaults)
-    return N.MergeDefaults(tbl, profileDefaults)
+    local out = N.MergeDefaults(tbl, profileDefaults)
+    linkGroups(out or tbl)
+    return out
 end
 
 function P.Setup(saved)
@@ -121,7 +131,6 @@ function P.Setup(saved)
     active = raw.profiles[raw.currentProfile]
     activeName = raw.currentProfile
 
-    -- The shared copies of the areas that every profile uses together.
     if type(raw.sharedData) ~= "table" then raw.sharedData = {} end
     if type(raw.profileScope) ~= "table" then raw.profileScope = {} end
     local sharedDefaults = {}
@@ -146,7 +155,6 @@ function P.Setup(saved)
     })
 end
 
--- registry
 
 function P.List()
     local out = {}
@@ -176,7 +184,6 @@ function P.UniqueName(name)
     return name .. " (" .. i .. ")"
 end
 
--- switching
 
 -- Replays settings events so every module re-reads the active profile.
 local function reapply()
@@ -257,7 +264,6 @@ function P.Delete(name)
     return true
 end
 
--- scope: per profile or shared by every profile
 
 -- A profile's data for export / backup, with shared areas taken from the shared copy.
 local function profileData(name)
@@ -297,7 +303,36 @@ function P.SetScope(area, scope)
     N:Fire("NUCLEUS_PROFILES_CHANGED")
 end
 
--- backups
+
+-- Parts of the Group's settings the Raid can share (Position tab): the Raid's entry points at the Group's
+-- table; saved files store it twice, so it is joined again on load.
+function P.IsLinked(cat)
+    local r = N.db and N.db.raid
+    return r and type(r.link) == "table" and r.link[cat] == true or false
+end
+
+-- Switching on replaces the Raid's own settings of that part; switching off keeps the current values
+-- as the Raid's own copy.
+function P.SetLink(cat, on)
+    local raid, party = active.raid, active.party
+    if not (raid and party and type(raid.link) == "table") then return end
+    on = on and true or false
+    if (raid.link[cat] == true) == on then return end
+    raid.link[cat] = on
+    if on then
+        raid[cat] = party[cat]
+    else
+        raid[cat] = N.DeepCopy(party[cat])
+    end
+    reapply()
+    N:Fire("NUCLEUS_PROFILE_CHANGED", activeName)
+end
+
+-- After something replaced a table (copying between Group and Raid): join the shared parts again.
+function P.RelinkGroups()
+    if active then linkGroups(active) end
+end
+
 
 function P.Backup(name, reason)
     local prof = raw.profiles[name]
@@ -329,7 +364,6 @@ function P.RestoreBackup(index)
     return true, b.name
 end
 
--- export / import
 
 function P.CanShare()
     return LibSerialize ~= nil and LibDeflate ~= nil
@@ -363,7 +397,6 @@ function P.Decode(text)
         return false, "IMPORT_ERR_DECODE"
     end
 
-    -- Keep only the keys a profile is made of, each as a table.
     local clean = {}
     for _, k in ipairs(P.KEYS) do
         if type(data.profile[k]) == "table" then clean[k] = data.profile[k] end
@@ -380,7 +413,6 @@ function P.Import(data, name)
     return name
 end
 
--- auto switch
 
 function P.GetSituation()
     local _, instanceType, difficultyID, _, maxPlayers = GetInstanceInfo()

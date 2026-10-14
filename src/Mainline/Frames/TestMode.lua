@@ -22,7 +22,6 @@ local CLASSES = {
     "MAGE", "WARLOCK", "MONK", "DRUID", "DEMONHUNTER", "EVOKER",
 }
 
--- Power type of each class (Druid and Monk depend on the role shown).
 local CLASS_POWER = {
     WARRIOR = "RAGE", PALADIN = "MANA", HUNTER = "FOCUS", ROGUE = "ENERGY", PRIEST = "MANA",
     DEATHKNIGHT = "RUNIC_POWER", SHAMAN = "MANA", MAGE = "MANA", WARLOCK = "MANA",
@@ -82,7 +81,6 @@ local function mockAuras(i)
     return buffs, debuffs, dispels, defensives, externals, offensives, crowd
 end
 
--- Party: 1 tank, 1 healer, 3 damage dealers; other groups cycle through the roles.
 local ROLE_CYCLE = { "TANK", "HEALER", "DAMAGER" }
 local PARTY_ROLES = { "TANK", "HEALER", "DAMAGER", "DAMAGER", "DAMAGER" }
 local function roleOf(i, key)
@@ -147,7 +145,6 @@ local function count(key)
     return math.min(cfg.maxColumns, 8) * cfg.unitsPerColumn
 end
 
--- Rows, columns and the size of the whole block (what the real header would measure).
 local function blockLayout(key, n)
     local cfg = N.db[key]
     local w, h, sp = cfg.width, cfg.height, cfg.spacing
@@ -166,8 +163,6 @@ local function blockLayout(key, n)
     return perCol, horizontal, totalW, totalH, colSp
 end
 
--- Size of the preview block of a group (the Position settings use it to keep frames in place
--- while the anchor point changes).
 function TM.BlockSize(key)
     if not (N.db and N.db[key]) then return 0, 0 end
     local _, _, w, h = blockLayout(key, count(key))
@@ -185,7 +180,6 @@ local function place(container, key, pool, n)
     local sx = anchor:find("RIGHT") and -1 or 1
     local sy = anchor:find("BOTTOM") and 1 or -1
 
-    -- the container is the whole block, so the anchor point of the group behaves like the real one
     container:SetSize(totalW, totalH)
 
     for i = 1, n do
@@ -205,8 +199,6 @@ local function place(container, key, pool, n)
     end
 end
 
--- Drag handle above a test container (same look as the real anchors). Shown while unlocked, moves
--- the saved position.
 local function makeHandle(container, key)
     local M = N.Media
     container:SetMovable(true)
@@ -348,7 +340,6 @@ local function buildKey(key, force)
     container:Show()
     syncHandles()
 
-    -- Re-render once anchors resolve so heal/absorb overlays get real widths.
     C_Timer.After(0, function()
         if not active then return end
         for i = 1, n do
@@ -358,7 +349,6 @@ local function buildKey(key, force)
     return true
 end
 
--- Pets bound to their owner sit next to the matching mock group frames (the Hunter is frame 3).
 local function attachPreview(key)
     local c = containers[key]
     local pool, owners = pools[key], pools.party
@@ -392,7 +382,6 @@ local function rebuild()
                 buildKey("party", true)
                 if containers.party then containers.party:Show() end
             end
-            -- The NPC frames hang on the group frames (the raid frames while the raid is edited).
             local hostKey = (key == "npc" and N.db.npc.attachEnabled) and (edited == "raid" and "raid" or "party") or nil
             if hostKey then
                 buildKey(hostKey, true)

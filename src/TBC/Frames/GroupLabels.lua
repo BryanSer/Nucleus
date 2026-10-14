@@ -4,9 +4,8 @@ local M = N.Media
 local L = N.L
 local IsSecret = N.IsSecret
 
--- Raid group names ("Group 1", ...): small text on the first frame of each raid group when the
--- raid is grouped by group. Raid only (db.raid.groupNames). The label lives in the frame's
--- overlay, so it moves, hides and fades with it.
+-- Raid group names: small text on the first frame of each raid group when the raid is grouped by group
+-- (db.raid.groupNames); it lives in the frame's overlay.
 
 local GL = {}
 N.GroupLabels = GL

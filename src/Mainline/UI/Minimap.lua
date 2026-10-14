@@ -9,7 +9,6 @@ N.Minimap = MB
 
 local button
 
--- Degrees from a delta vector: WoW's Atan2 (degrees) or a Lua fallback.
 local function angleOf(dy, dx)
     if _G.Atan2 then return _G.Atan2(dy, dx) end
     return math.deg(math.atan2(dy, dx))
@@ -40,7 +39,6 @@ local function create()
     button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:RegisterForDrag("LeftButton")
 
-    -- The logo is already a round badge, so it needs no Blizzard border.
     button:SetSize(32, 32)
     local icon = button:CreateTexture(nil, "ARTWORK")
     icon:SetAllPoints()

@@ -5,9 +5,8 @@ local L = N.L
 
 local function uc(c) return c[1], c[2], c[3], c[4] or 1 end
 
--- Supporters: a pane that slides out to the right of the options window (About tab)
--- and lists the people who support Nucleus, grouped by tier, with the testers below. The names
--- live in Core/About.lua.
+-- Supporters: a pane that slides out right of the options window (About tab) listing supporters by tier,
+-- testers below; the names live in Core/About.lua.
 
 local S = {}
 N.Supporters = S
@@ -166,8 +165,6 @@ function S.Toggle()
     if S.IsShown() then S.Hide() else S.Show() end
 end
 
--- The button in the About page: a soft accent glow behind the label that breathes
--- while the pane is closed, and a small arrow that turns when it is open.
 function S.MakeButton(parent)
     local b = CreateFrame("Button", nil, parent)
     b._rowHeight = 36

@@ -5,10 +5,8 @@ local L = N.L
 
 local function uc(c) return c[1], c[2], c[3], c[4] or 1 end
 
--- Nucleus' own message dialog in the options window's look, replacing StaticPopup for questions and notices.
--- One dialog at a time, the next waits in a queue.
---   N.Dialog.Show{ title, text, input = { text, maxLetters, readOnly }, buttons = { { text, onClick, primary } } }
---   N.Dialog.Confirm(text, onYes [, { title, yes, no }]), .Prompt(text, default, onAccept(text)), .Reload(text)
+-- Nucleus' own message dialog in the options window's look, replacing StaticPopup; one at a time, the next
+-- waits in a queue. N.Dialog.Show / Confirm / Prompt / Reload.
 
 local D = {}
 N.Dialog = D
@@ -138,9 +136,8 @@ local function open(spec)
     end
     for i = #list + 1, #f.buttons do f.buttons[i]:Hide() end
 
-    -- A secureMacro button is covered by a transparent secure button that runs the macro: addon
-    -- code may not call ReloadUI, a macro may /reload. The overlays sit on their own holder so
-    -- they go away with the dialog even in combat.
+    -- A secureMacro button is covered by a transparent secure button running the macro (addon code may not call
+    -- ReloadUI, a macro may /reload); the overlays sit on their own holder so they go away with the dialog.
     local holder = f.secureHolder
     if not holder then
         holder = CreateFrame("Frame", nil, f.box)
@@ -272,7 +269,6 @@ function D.Reload(text)
     })
 end
 
--- The client cannot open web links: show the address in a field to copy.
 function D.Link(label, url)
     D.Show({
         title = L["Nucleus"],

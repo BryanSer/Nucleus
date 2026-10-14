@@ -1,12 +1,9 @@
 local _, ns = ...
 local N = ns.N
 
--- Central visual constants: flat dark surfaces, 1px black borders, accent-on-hover controls,
--- titled panes.
 local M = {}
 N.Media = M
 
--- 1px white texture for every bar and border fill.
 M.flat = "Interface\\Buttons\\WHITE8X8"
 
 -- Bar fill textures per group type (Appearance > Color); "flat" is ours, the others are Blizzard textures.
@@ -16,9 +13,7 @@ M.barTextures = {
     modern   = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill",
     -- Default: uniform grey (NucleusBar3.tga), so SetStatusBarColor gives a flat, matte class color.
     nucleus  = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusBar3.tga",
-    -- Uniform white fill: the class/custom color shows fully flat across the bar.
     nucleus2 = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusBar2.tga",
-    -- The old default: a small grayscale vertical gradient (NucleusBar.tga, generated).
     nucleus3 = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusBar.tga",
 }
 
@@ -157,7 +152,6 @@ function N.Recolor(rgb)
     for _, fn in ipairs(recolorHooks) do pcall(fn) end
 end
 
--- Use when the UI is already built: the change shows without a /reload.
 
 -- Class color as {r,g,b} from Blizzard's fixed colors (not CUSTOM_CLASS_COLORS). pcall-guarded: a bad or secret
 -- class token must not abort the render; the fallback is grey.

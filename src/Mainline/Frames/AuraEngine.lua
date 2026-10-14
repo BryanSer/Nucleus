@@ -2,13 +2,8 @@ local _, ns = ...
 local N = ns.N
 local M = N.Media
 
--- Aura engine (Retail 12.1+). Addon code can't read auras in combat, but it can tell the game's own
--- AuraContainer which auras to show (a filter string plus optional spell IDs) and how its buttons look; the
--- game creates and drives the icons.
---   E.Supported()   E.Apply(button, id, spec) (spec = nil removes)   E.Remove(button, id)
--- spec = { groups = { { key, filter, candidate, max, token, border } }, shape = "icon" | "rect" | "bar" |
---   "border" | "overlay" | "text" | "dispel", size, spacing, point, x, y, growth, max, cd, stacks, time, ... }
--- Containers can't be created in combat: structural changes wait for it to end, numbers apply live.
+-- Aura engine (Retail 12.1+): addon code can't read auras in combat, but it can tell the game's AuraContainer
+-- which auras to show and how its buttons look. Structural changes wait for the end of combat.
 
 local E = {}
 N.AuraEngine = E
@@ -18,7 +13,6 @@ local supported
 
 local WHITE = "Interface\\Buttons\\WHITE8X8"
 
--- Snaps UI units to whole pixels at the frame's scale, so 1px borders look even on every side.
 local function snap(frame, v)
     local PU = _G.PixelUtil
     if PU and PU.GetNearestPixelSize and frame and frame.GetEffectiveScale then
@@ -47,7 +41,6 @@ function E.Supported()
     return supported
 end
 
--- formatters
 
 -- Countdown text is a formatter over the remaining seconds (decimal / color bands) the game evaluates, so it
 -- works while the timing is hidden.
@@ -102,7 +95,6 @@ local function formatterFor(tc)
     if pcall(f.SetBreakpoints, f, points) then formatters[key] = f end
     return formatters[key] or nil
 end
--- button construction (initializeFrame)
 
 local function pulseGroup(region, duration)
     local ag = region:CreateAnimationGroup()
@@ -116,9 +108,8 @@ local function pulseGroup(region, duration)
     return ag, a
 end
 
--- Frame-wide glows (custom indicator Glow, preview): only what the game animates itself, no Lua per frame.
--- pulse (fading ring), halo (soft glow), pixel (dashes marching round the edge).
--- E.NewGlow(parent, anchor) -> g; g:Show(style, r, g, b, offset, thickness, speed, length); g:Hide()
+-- Frame-wide glows (custom indicator Glow, preview) built only from what the game animates itself: pulse, halo,
+-- pixel. E.NewGlow(parent, anchor) -> g; g:Show(style, r, g, b, offset, thickness, speed, length).
 local PROC_ATLAS = "UI-HUD-ActionBar-Proc-Loop-Flipbook"
 
 local function loopingAlpha(region, duration)
@@ -157,8 +148,6 @@ function E.NewGlow(parent, anchor)
         wrap:Hide()
     end
 
-    -- One side of a marching ring. side: "top" (moves right), "right" (down),
-    -- "bottom" (left), "left" (up).
     local function makeStrip()
         local clip = CreateFrame("Frame", nil, wrap)
         clip:EnableMouse(false)
@@ -194,7 +183,6 @@ function E.NewGlow(parent, anchor)
             clip:SetPoint("BOTTOMLEFT", wrap, "BOTTOMLEFT", inset, inset + th)
             clip:SetWidth(th)
         end
-        -- Clockwise: top moves right, right down, bottom left, left up; `reverse` flips it.
         if horizontal then
             if (side == "top") ~= (reverse == true) then
                 tex:SetPoint("TOPLEFT", clip, "TOPLEFT", -period, 0)
@@ -355,7 +343,13 @@ local function animation(button, kind)
     return cd
 end
 
--- Numbers (sizes, font sizes, positions) that can change without a rebuild.
+local function textAt(fs, button, point, x, y, color)
+    fs:ClearAllPoints()
+    fs:SetPoint(point, button, point, x, y)
+    fs:SetJustifyH(point:find("LEFT") and "LEFT" or point:find("RIGHT") and "RIGHT" or "CENTER")
+    if color then fs:SetTextColor(color[1], color[2], color[3], 1) end
+end
+
 local function restyle(button, spec)
     local sz = button._nuc
     if not sz then return end
@@ -383,15 +377,13 @@ local function restyle(button, spec)
     if sz.count then
         pcall(function()
             sz.count:SetFont(M.font, spec.stackSize or 10, "OUTLINE")
-            sz.count:ClearAllPoints()
-            sz.count:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", spec.stackX or 1, spec.stackY or -1)
+            textAt(sz.count, button, spec.stackPoint or "BOTTOMRIGHT", spec.stackX or 1, spec.stackY or -1, spec.stackColor)
         end)
     end
     if sz.time then
         pcall(function()
             sz.time:SetFont(M.font, spec.timeSize or 10, "OUTLINE")
-            sz.time:ClearAllPoints()
-            sz.time:SetPoint("CENTER", button, "CENTER", spec.timeX or 0, spec.timeY or 0)
+            textAt(sz.time, button, spec.timePoint or "CENTER", spec.timeX or 0, spec.timeY or 0, spec.timeBaseColor)
         end)
     end
     if sz.label then
@@ -550,6 +542,28 @@ local function initButton(h, group)
                         fillTex:SetColorTexture(c[1], c[2], c[3], 1)
                     end
                 end
+                if shape == "rect" and not spec.isColor then
+                    local anim = (spec.cd and spec.cd ~= "none") and animation(button, spec.cd) or nil
+                    local host = CreateFrame("Frame", nil, button)
+                    host:SetAllPoints(button)
+                    host:EnableMouse(false)
+                    host:SetFrameLevel(((anim and anim.GetFrameLevel and anim:GetFrameLevel()) or button:GetFrameLevel()) + 4)
+                    if spec.stacks then
+                        local fs = host:CreateFontString(nil, "OVERLAY")
+                        fs:SetJustifyH("RIGHT")
+                        fs:SetFont(M.font, spec.stackSize or 10, "OUTLINE")
+                        textAt(fs, button, spec.stackPoint or "BOTTOMRIGHT", spec.stackX or 1, spec.stackY or -1, spec.stackColor)
+                        pcall(button.SetApplicationCount, button, fs, {})
+                        sz.count = fs
+                    end
+                    if spec.time then
+                        local fs = host:CreateFontString(nil, "OVERLAY")
+                        fs:SetFont(M.font, spec.timeSize or 10, "OUTLINE")
+                        textAt(fs, button, spec.timePoint or "CENTER", spec.timeX or 0, spec.timeY or 0, spec.timeBaseColor)
+                        bindTime(button, fs, spec)
+                        sz.time = fs
+                    end
+                end
             elseif shape == "glow" then
                 local c = spec.color or { 1, 1, 1 }
                 local host = CreateFrame("Frame", nil, button)
@@ -598,14 +612,14 @@ local function initButton(h, group)
                     local fs = host:CreateFontString(nil, "OVERLAY")
                     fs:SetJustifyH("RIGHT")
                     fs:SetFont(M.font, spec.stackSize or 10, "OUTLINE")
-                    fs:SetPoint("BOTTOMRIGHT", button, "BOTTOMRIGHT", spec.stackX or 1, spec.stackY or -1)
+                    textAt(fs, button, spec.stackPoint or "BOTTOMRIGHT", spec.stackX or 1, spec.stackY or -1, spec.stackColor)
                     pcall(button.SetApplicationCount, button, fs, {})
                     sz.count = fs
                 end
                 if spec.time then
                     local fs = host:CreateFontString(nil, "OVERLAY")
                     fs:SetFont(M.font, spec.timeSize or 10, "OUTLINE")
-                    fs:SetPoint("CENTER", button, "CENTER", spec.timeX or 0, spec.timeY or 0)
+                    textAt(fs, button, spec.timePoint or "CENTER", spec.timeX or 0, spec.timeY or 0, spec.timeBaseColor)
                     bindTime(button, fs, spec)
                     sz.time = fs
                 end
@@ -615,7 +629,6 @@ local function initButton(h, group)
     end
 end
 
--- containers
 
 local function sortOpts(opts)
     if AuraContainerSortMethod and AuraContainerSortMethod.Default then opts.sortMethod = AuraContainerSortMethod.Default end
@@ -675,8 +688,6 @@ local function anchor(h)
     local wraps = perRow and perRow < (spec.max or 1) and (growth == "LEFT" or growth == "RIGHT")
     local linesUp = growth == "UP" or (wraps and point:find("BOTTOM") ~= nil)
     if shape == "icon" or shape == "rect" or shape == "bar" or shape == "dispel" then
-        -- The first element sits with the chosen point on that point of the frame, the others
-        -- grow from it; the container is placed by the corner the flow starts in.
         flowPoint = (linesUp and "BOTTOM" or "TOP") .. ((growth == "LEFT") and "RIGHT" or "LEFT")
         local px = point:find("LEFT") and 0 or point:find("RIGHT") and w or w / 2
         local py = point:find("TOP") and 0 or point:find("BOTTOM") and hgt or hgt / 2

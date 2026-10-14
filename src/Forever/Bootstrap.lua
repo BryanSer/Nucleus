@@ -25,7 +25,6 @@ local function start()
     step("Ping.Init", N.Ping.Init)
     step("TargetedSpellBars.Init", N.TargetedSpellBars.Init)
 
-    -- The header assigns units, we only repaint.
     N:On("GROUP_ROSTER_UPDATE", function()
         N.UnitFrame.ForEachButton(function(child)
             if child:IsShown() then N.UnitFrame.FullUpdate(child) end
@@ -72,7 +71,6 @@ local function start()
         N:Print(N.L["WELCOME_MSG"]:format(ns.VERSION or "?"))
     end
 
-    -- One-time welcome window on the very first start.
     local function showFirstRun()
         N.Dialog.Show({
             title = N.L["FIRST_RUN_TITLE"],

@@ -5,13 +5,12 @@ local addonName, ns = ...
 
 ns.CLIENT = "Mainline"
 ns.ADDON = addonName
-ns.VERSION = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Version") or "1.0.2"
+ns.VERSION = C_AddOns and C_AddOns.GetAddOnMetadata(addonName, "Version") or "1.0.3"
 
 local N = {}
 ns.N = N
 _G.Nucleus = N
 
--- event name -> list of handlers
 local handlers = {}
 
 local dispatcher = CreateFrame("Frame")
@@ -23,7 +22,6 @@ dispatcher:SetScript("OnEvent", function(_, event, ...)
     end
 end)
 
--- Registers a handler for a game event or an internal message (see N:Fire).
 function N:On(event, fn)
     local list = handlers[event]
     if not list then
@@ -36,7 +34,6 @@ function N:On(event, fn)
     list[#list + 1] = fn
 end
 
--- Internal messages are prefixed NUCLEUS_.
 function N:Fire(message, ...)
     local list = handlers[message]
     if not list then return end

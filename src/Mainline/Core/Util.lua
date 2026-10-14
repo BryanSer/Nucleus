@@ -12,9 +12,8 @@ function N.DeepCopy(v)
     return out
 end
 
--- Merges defaults into a saved table without overwriting existing keys. Lists (e.g. click-cast
--- bindings) count as one value: they seed a missing list but never re-add entries the user
--- removed.
+-- Merges defaults into a saved table without overwriting keys; lists count as one value (a missing list is
+-- seeded, removed entries are never re-added).
 function N.MergeDefaults(target, defaults)
     if type(target) ~= "table" then target = {} end
     for k, v in pairs(defaults) do
@@ -76,7 +75,6 @@ function N.Round(v)
     return floor(v + 0.5)
 end
 
--- Snaps UI units to whole pixels at the frame's scale, so 1px borders look even on every side.
 function N.Snap(frame, v)
     local PU = _G.PixelUtil
     if PU and PU.GetNearestPixelSize and frame and frame.GetEffectiveScale then

@@ -1,10 +1,8 @@
 local _, ns = ...
 local N = ns.N
 
--- Cell profile import: builds a Nucleus profile from a Cell "Profile" export (sizes, colors, spell IDs,
--- switches). Whatever has no counterpart is skipped and listed in the report.
---   CI.Decode(text) -> ok, data | errorKey;   CI.Layouts(data) -> sorted layout names;
---   CI.Convert(data, partyLayout, raidLayout) -> profile table, report { done, skipped }
+-- Cell profile import: builds a Nucleus profile from a Cell "Profile" export; whatever has no counterpart is
+-- skipped and listed in the report.
 
 local CI = {}
 N.CellImport = CI
@@ -18,7 +16,6 @@ local GROWTH = {
     ["top-to-bottom"] = "DOWN", ["bottom-to-top"] = "UP",
 }
 
--- decoding
 
 function CI.Decode(text)
     local LibSerialize = LibStub and LibStub:GetLibrary("LibSerialize", true)
@@ -42,7 +39,6 @@ function CI.Layouts(data)
     return out
 end
 
--- helpers
 
 local function num(v) return type(v) == "number" and v or nil end
 local function bool(v) if type(v) == "boolean" then return v end return nil end
@@ -91,7 +87,40 @@ local function place(pos)
     return point, sc(num(pos[4])), sc(num(pos[5]))
 end
 
--- appearance
+-- Cell anchors an indicator with its own point on a point of the frame; here an object hangs on one point only,
+-- so the offset is corrected by the difference of the two points times its size.
+local function fx(p) return p:find("LEFT") and 0 or p:find("RIGHT") and 1 or 0.5 end
+local function fy(p) return p:find("BOTTOM") and 0 or p:find("TOP") and 1 or 0.5 end
+
+local function placeFor(pos, w, h)
+    if type(pos) ~= "table" then return nil end
+    local own = type(pos[1]) == "string" and CORNERS[pos[1]] and pos[1] or nil
+    local rel = (type(pos[3]) == "string" and CORNERS[pos[3]] and pos[3]) or own
+    if not rel then return nil end
+    local x, y = sc(num(pos[4])), sc(num(pos[5]))
+    if own and own ~= rel and x and y then
+        x = x + (fx(rel) - fx(own)) * (w or 0)
+        y = y + (fy(rel) - fy(own)) * (h or 0)
+    end
+    if x then x = math.floor(x + 0.5) end
+    if y then y = math.floor(y + 0.5) end
+    return rel, x, y
+end
+
+-- Size of an icon that may be a rectangle (Cell: 12 x 20): the average, plus width and height.
+local function avgSize(s)
+    local w, h = firstSize(s)
+    if w and h then return math.floor((w + h) / 2 + 0.5), w, h end
+    return w or h, w, h
+end
+
+-- The icon indicators sit a pixel inside the frame edge; the source offsets are from the edge itself.
+local function inset(point)
+    local ax = point:find("LEFT") and 1 or point:find("RIGHT") and -1 or 0
+    local ay = point:find("TOP") and -1 or point:find("BOTTOM") and 1 or 0
+    return ax, ay
+end
+
 
 local function convertAppearance(a, out, report)
     if type(a) ~= "table" then return end
@@ -169,20 +198,16 @@ local function convertAppearance(a, out, report)
     report.done[#report.done + 1] = "CELLR_APPEARANCE"
 end
 
--- indicators
 
--- Plain icon indicators: source name -> Nucleus key.
 local ICONS = {
     statusIcon = "statusIcon", roleIcon = "role", leaderIcon = "leader",
     combatIcon = "combatIcon", readyCheckIcon = "readyCheck", playerRaidIcon = "raidMarker",
 }
 local TEXTS = { nameText = "name", healthText = "healthText", levelText = "levelText" }
--- Rows of icons: source name -> Nucleus auras row.
 local ROWS = {
     externalCooldowns = "externals", defensiveCooldowns = "defensives",
     offensiveCooldowns = "offensives", debuffs = "debuffs", crowdControls = "crowdControls",
 }
--- Names with no counterpart.
 local NO_MATCH = {
     aggroBlink = true, aggroBar = true, aoeHealing = true,
     allCooldowns = true, tankActiveMitigation = true, raidDebuffs = true,
@@ -206,9 +231,9 @@ end
 local function convertRow(ind, row, styleDefault)
     put(row, "enabled", bool(ind.enabled))
     put(row, "max", num(ind.num))
-    local w = firstSize(ind.size)
+    local w, fw, fh = avgSize(ind.size)
     put(row, "size", w)
-    local point, x, y = place(ind.position)
+    local point, x, y = placeFor(ind.position, fw or w, fh or w)
     put(row, "point", point); put(row, "x", x); put(row, "y", y)
     put(row, "growth", GROWTH[ind.orientation])
     put(row, "showTime", bool(ind.showDuration))
@@ -234,8 +259,9 @@ local function convertIndicators(list, out, report, styleDefault)
             if TEXTS[name] then
                 local o = ensure(ind, TEXTS[name])
                 put(o, "enabled", bool(e.enabled))
-                put(o, "size", fontSizes(e.font))
-                local point, x, y = place(e.position)
+                local fs = fontSizes(e.font)
+                put(o, "size", fs)
+                local point, x, y = placeFor(e.position, 0, fs or 10)
                 if point and name ~= "levelText" then o.position = point:lower() end
                 put(o, "x", x); put(o, "y", y)
                 if name == "levelText" then
@@ -255,9 +281,15 @@ local function convertIndicators(list, out, report, styleDefault)
             elseif ICONS[name] then
                 local o = ensure(ind, ICONS[name])
                 put(o, "enabled", bool(e.enabled))
-                put(o, "size", (firstSize(e.size)))
-                local point, x, y = place(e.position)
-                if point then o.position = point:lower() end
+                local size, fw, fh = avgSize(e.size)
+                put(o, "size", size)
+                local point, x, y = placeFor(e.position, fw or size, fh or size)
+                if point then
+                    o.position = point:lower()
+                    local ax, ay = inset(point)
+                    if x then x = x - ax end
+                    if y then y = y - ay end
+                end
                 put(o, "x", x); put(o, "y", y)
                 if name == "roleIcon" and e.hideDamager ~= nil then o.showDamager = not e.hideDamager end
                 if name == "leaderIcon" then put(o, "hideInCombat", bool(e.hideInCombat)) end
@@ -315,11 +347,11 @@ local function convertIndicators(list, out, report, styleDefault)
             elseif name == "privateAuras" then
                 local o = ensure(ind, "privateAura")
                 put(o, "enabled", bool(e.enabled))
-                put(o, "size", (firstSize(e.size)))
+                put(o, "size", (avgSize(e.size)))
             elseif name == "missingBuffs" then
                 local o = ensure(ind, "missingBuffs")
                 put(o, "enabled", bool(e.enabled))
-                put(o, "size", (firstSize(e.size)))
+                put(o, "size", (avgSize(e.size)))
                 put(o, "growth", (GROWTH[e.orientation] == "LEFT" or GROWTH[e.orientation] == "RIGHT")
                     and GROWTH[e.orientation] or nil)
             elseif ROWS[name] then
@@ -332,10 +364,10 @@ local function convertIndicators(list, out, report, styleDefault)
             elseif name == "dispels" then
                 local o = ensure(auras, "dispels")
                 put(o, "enabled", bool(e.enabled))
-                -- The dispel-type icon row.
                 o.typeIcons = true
-                put(o, "typeIconSize", (firstSize(e.size)))
-                local point, x, y = place(e.position)
+                local tsize, tw, th = avgSize(e.size)
+                put(o, "typeIconSize", tsize)
+                local point, x, y = placeFor(e.position, tw or tsize, th or tsize)
                 put(o, "typeIconPoint", point); put(o, "typeIconX", x); put(o, "typeIconY", y)
                 put(o, "typeIconGrowth", GROWTH[e.orientation])
                 if type(e.highlightType) == "table" then
@@ -373,12 +405,17 @@ local function convertCustom(list, report)
                     end
                 end
                 c.spells = table.concat(ids, ",")
-                put(c, "size", (firstSize(e.size)))
-                local point, x, y = place(e.position)
+                local csize, cw, ch = avgSize(e.size)
+                put(c, "size", csize)
+                local point, x, y = placeFor(e.position, cw or csize, ch or csize)
                 put(c, "point", point); put(c, "x", x); put(c, "y", y)
                 put(c, "growth", GROWTH[e.orientation])
-                put(c, "max", num(e.numPerLine) or num(e.num))
-                if type(e.spacing) == "table" then put(c, "spacing", num(e.spacing[1])) end
+                put(c, "max", num(e.num))
+                put(c, "perRow", num(e.numPerLine))
+                if type(e.spacing) == "table" then
+                    put(c, "spacing", sc(num(e.spacing[1])))
+                    put(c, "lineSpacing", sc(num(e.spacing[2])))
+                end
                 put(c, "showTime", bool(e.showDuration))
                 put(c, "showStacks", bool(e.showStack))
                 put(c, "showCooldown", bool(e.showAnimation))
@@ -392,7 +429,6 @@ local function convertCustom(list, report)
     return out
 end
 
--- layouts
 
 local function convertGroup(layout, out, report, isRaid)
     local main = layout.main
@@ -430,7 +466,6 @@ local function convertGroup(layout, out, report, isRaid)
         local pb = ensure(out, "indicators", "powerBar")
         if ps <= 0 then pb.enabled = false else pb.enabled, pb.height = true, ps end
     end
-    -- Which raid groups are shown.
     local gf = layout.groupFilter
     if isRaid and type(gf) == "table" then
         local t = {}
@@ -483,10 +518,16 @@ local function convertSide(layout, profile, report)
         if npc.sameSizeAsMain == false then w, h = firstSize(npc.size) end
         put(g, "width", w); put(g, "height", h)
     end
+    local spot = layout.spotlight
+    if type(spot) == "table" then
+        local g = ensure(profile, "spotlight")
+        local w, h = mw, mh
+        if spot.sameSizeAsMain == false then w, h = firstSize(spot.size) end
+        put(g, "width", w); put(g, "height", h)
+    end
     report.done[#report.done + 1] = "CELLR_PETS"
 end
 
--- click casting
 
 local BUTTONS = { [1] = "LeftButton", [2] = "RightButton", [3] = "MiddleButton", [4] = "Button4", [5] = "Button5" }
 local PLAIN = { target = "target", togglemenu = "menu", focus = "focus", assist = "assist" }
@@ -597,7 +638,6 @@ local function convertDisabled(cell, key, rowKey, profile)
     end
 end
 
--- entry point
 
 local function indicatorsOf(layout, name)
     for _, e in ipairs(layout and layout.indicators or {}) do

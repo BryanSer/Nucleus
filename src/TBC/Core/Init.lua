@@ -6,7 +6,7 @@ local addonName, ns = ...
 ns.CLIENT = "TBC"
 ns.ADDON = addonName
 local getMeta = (C_AddOns and C_AddOns.GetAddOnMetadata) or _G.GetAddOnMetadata
-ns.VERSION = getMeta and getMeta(addonName, "Version") or "1.0.2"
+ns.VERSION = getMeta and getMeta(addonName, "Version") or "1.0.3"
 
 local N = {}
 ns.N = N
@@ -21,7 +21,6 @@ function N.SafeRegisterUnit(frame, event, unit)
     return pcall(frame.RegisterUnitEvent, frame, event, unit)
 end
 
--- event name -> list of handlers
 local handlers = {}
 
 local dispatcher = CreateFrame("Frame")
@@ -33,7 +32,6 @@ dispatcher:SetScript("OnEvent", function(_, event, ...)
     end
 end)
 
--- Registers a handler for a game event or an internal message (see N:Fire).
 function N:On(event, fn)
     local list = handlers[event]
     if not list then
@@ -46,7 +44,6 @@ function N:On(event, fn)
     list[#list + 1] = fn
 end
 
--- Internal messages are prefixed NUCLEUS_.
 function N:Fire(message, ...)
     local list = handlers[message]
     if not list then return end

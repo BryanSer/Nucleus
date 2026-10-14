@@ -3,10 +3,7 @@ local N = ns.N
 local M = N.Media
 local L = N.L
 
--- Unit frame visual layer, shared by the group frames (real units) and test mode (mock data):
---   UF.CreateVisual(b, key)  builds every texture on the button
---   readUnit(b) / mock       fill b.* data from the game or a mock table
---   render(b)                paints the textures from b.*
+-- Unit frame visual layer shared by the group frames (real units) and test mode (mock data).
 
 local UF = {}
 N.UnitFrame = UF
@@ -17,9 +14,8 @@ local Abbrev = N.Abbreviate or _G.AbbreviateNumbers or function(v)
     return tostring(v)
 end
 
--- Custom Health Text / Power Text templates: {p}=percent, {v}=value, {m}=max, {d}=deficit. Only
--- the final SetFormattedText touches secret values. spec and args are built in one left-to-right
--- gsub pass so the Nth argument always matches the Nth %d.
+-- Custom Health / Power text templates: {p}=percent, {v}=value, {m}=max, {d}=deficit. Built in one gsub pass so
+-- the Nth argument matches the Nth %d; only the final SetFormattedText touches secret values.
 local function applyCustomFormat(fs, tmpl, val, valMax, pct)
     local args = {}
     local spec = (tmpl or ""):gsub("%%", "%%%%")
@@ -48,6 +44,18 @@ local function applyCustomFormat(fs, tmpl, val, valMax, pct)
     fs:SetFormattedText(spec, unpack(args))
 end
 
+-- The first n characters of a UTF-8 string (a name), whole characters only.
+local function limitChars(str, n)
+    local i, count, len = 1, 0, #str
+    while i <= len do
+        local ch = str:byte(i)
+        count = count + 1
+        if count > n then return str:sub(1, i - 1) end
+        i = i + ((ch >= 240 and 4) or (ch >= 224 and 3) or (ch >= 192 and 2) or 1)
+    end
+    return str
+end
+
 local UNIT_EVENTS = {
     "UNIT_HEALTH", "UNIT_MAXHEALTH",
     "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
@@ -57,7 +65,6 @@ local UNIT_EVENTS = {
     "UNIT_HEAL_ABSORB_AMOUNT_CHANGED",
 }
 
--- Visual construction
 
 local function snap(frame, v)
     local PU = _G.PixelUtil
@@ -83,8 +90,8 @@ function UF.CreateVisual(b, key)
     N.SkinBar(health)
     b.health = health
 
-    -- Incoming heal / absorb / heal-absorb are StatusBars on health's scale, anchored to its fill texture with a pixel
-    -- width: SetValue(amount) gives the fraction without arithmetic on secrets (Core/Secret.lua).
+    -- Incoming heal / absorb bars are StatusBars on health's scale, anchored to its fill texture: SetValue
+    -- gives the fraction without arithmetic on secrets (Core/Secret.lua).
     local overlayClip = CreateFrame("Frame", nil, b)
     overlayClip:SetAllPoints(health)
     overlayClip:SetClipsChildren(true)
@@ -93,8 +100,6 @@ function UF.CreateVisual(b, key)
 
     local fillTex = health:GetStatusBarTexture()
 
-    -- Texture, tiling and color come from Appearance > Shield in LayoutBars. Only the anchor
-    -- geometry (which is what makes this secret-safe) is fixed at creation.
     local function overlayBar()
         local bar = CreateFrame("StatusBar", nil, overlayClip)
         bar:SetStatusBarTexture(M.flat)
@@ -105,12 +110,11 @@ function UF.CreateVisual(b, key)
 
     b.healPredict = overlayBar()
 
-    -- Shield: anchored to the fill edge like healPredict. The raw absorb amount is fine, because
-    -- overlayClip cuts off whatever passes the bar's right edge.
+    -- Shield: the raw absorb amount is fine, overlayClip cuts off whatever passes the bar's right edge.
     b.absorb = overlayBar()
 
-    -- The part of the shield that doesn't fit into the missing health: a second bar growing from
-    -- the right edge towards the left, clipped to the filled part. It never overlaps the first.
+    -- Second bar for the part of the shield that doesn't fit into the missing health, growing from the right
+    -- edge.
     local fillClip = CreateFrame("Frame", nil, b)
     fillClip:SetPoint("TOPLEFT", health, "TOPLEFT")
     fillClip:SetPoint("BOTTOMRIGHT", fillTex, "BOTTOMRIGHT")
@@ -124,8 +128,7 @@ function UF.CreateVisual(b, key)
     absorbOver:SetPoint("BOTTOMRIGHT", health, "BOTTOMRIGHT", 0, 0)
     b.absorbOver = absorbOver
 
-    -- Heal-absorb eats INTO the filled health instead of extending past it,
-    -- so it fills backwards from the same edge.
+    -- Heal-absorb eats into the filled health, so it fills backwards from the same edge.
     local healAbsorb = CreateFrame("StatusBar", nil, overlayClip)
     healAbsorb:SetStatusBarTexture(M.flat)
     healAbsorb:SetReverseFill(true)
@@ -133,8 +136,7 @@ function UF.CreateVisual(b, key)
     healAbsorb:SetPoint("BOTTOMRIGHT", fillTex, "BOTTOMRIGHT", 0, 0)
     b.healAbsorb = healAbsorb
 
-    -- Overshield spark: only shown when the heal-prediction calculator says
-    -- the absorb overflows past missing health (see render()).
+    -- Overshield spark: shown when the calculator reports an overflow (see render()).
     local overAbsorb = overlayClip:CreateTexture(nil, "OVERLAY")
     overAbsorb:SetTexture(M.flat)
     overAbsorb:SetColorTexture(0.75, 0.90, 1.00, 0.9)
@@ -145,14 +147,11 @@ function UF.CreateVisual(b, key)
     overAbsorb:Hide()
     b.overAbsorb = overAbsorb
 
-    -- The calculator gives the absorb clamped to missing health plus an overflow flag; the clamp mode is re-applied
-    -- before every call in render() because it doesn't reliably stick.
+    -- The clamp mode is re-applied before every call in render() because it doesn't reliably stick.
     if _G.CreateUnitHealPredictionCalculator then
         b.healCalc = CreateUnitHealPredictionCalculator()
     end
 
-    -- Anchored for real in LayoutBars (with the configured X/Y offset); this is a placeholder so
-    -- the frame looks sane before that runs.
     local power = CreateFrame("StatusBar", nil, b)
     power:SetPoint("BOTTOMLEFT", 1, 1)
     power:SetPoint("BOTTOMRIGHT", -1, 1)
@@ -160,8 +159,7 @@ function UF.CreateVisual(b, key)
     N.SkinBar(power)
     b.power = power
 
-    -- Everything that must sit above the bars (text, edges, indicator icons) lives on this overlay
-    -- frame, a child of the button drawn above the StatusBar child frames.
+    -- Text, edges and indicator icons sit on this overlay, above the StatusBar children.
     local overlay = CreateFrame("Frame", nil, b)
     overlay:SetAllPoints(b)
     overlay:SetFrameLevel(math.max(health:GetFrameLevel(), power:GetFrameLevel()) + 4)
@@ -172,9 +170,7 @@ function UF.CreateVisual(b, key)
     top:SetFrameLevel(overlay:GetFrameLevel() + 50)
     b.topOverlay = top
 
-    -- Target and mouseover outline, one draw layer above the Aggro Border indicator. Separate
-    -- texture sets so each can have its own color and thickness (Appearance > Border). Points and
-    -- size are set in applyOutlineStyle/LayoutBars, these are just the bare textures.
+    -- Target / mouseover outline textures; points and size are set in applyOutlineStyle / LayoutBars.
     local function makeOutline()
         local edges = {}
         for _ = 1, 4 do
@@ -268,7 +264,6 @@ end
 
 UF.PlaceText = placeText
 
--- Overlay texture, tiling and tint come from Appearance > Shield; render() only touches SetValue on these bars.
 local function applyShieldStyle(bar, cfg)
     local tex = M.shieldTextures[cfg.style] or M.flat
     bar:SetStatusBarTexture(tex)
@@ -281,9 +276,8 @@ local function applyShieldStyle(bar, cfg)
     bar:SetStatusBarColor(c[1], c[2], c[3], cfg.opacity or 1)
 end
 
--- Target/mouseover outline: color and thickness from Appearance > Border. edges is the 4-texture
--- set from makeOutline() in TOP/BOTTOM/LEFT/RIGHT order. It grows outward, never into the bars;
--- TOP/BOTTOM take the corners, LEFT/RIGHT fit between them.
+-- Target / mouseover outline edges in TOP / BOTTOM / LEFT / RIGHT order; it grows outward, TOP / BOTTOM take
+-- the corners.
 local MARGIN = 0
 local function applyOutlineStyle(edges, cfg)
     local c = cfg.color or { 1, 1, 1 }
@@ -344,8 +338,7 @@ local function applyFrameBorder(b, cfg)
     N.SetPanelBorder(b, { 0, 0, 0, 0 })
 end
 
--- Whether this unit's role is allowed to show a power bar (Indicators > Power
--- Bar > Show for ...). Unknown / secret roles are allowed.
+-- Whether this unit's role may show a power bar; unknown / secret roles are allowed.
 function UF.PowerAllowed(b)
     -- Forever has no roles: the power bar is switched on or off per class.
     local pb = N.db[b.groupKey].indicators.powerBar
@@ -371,8 +364,7 @@ function UF.LayoutBars(b)
     b._powerShown = UF.PowerAllowed(b)
     local ph = (pOn(b, "powerBar", pb.enabled) and b._powerShown and (pb.height or 4)) or 0
 
-    -- Bar texture + loss color apply to both bars; SetStatusBarColor is
-    -- re-applied by the next render() (changing texture resets the tint).
+    -- Changing the texture resets the tint, so SetStatusBarColor is re-applied by the next render().
     N.SetBarTexture(b.health, appearance.barTexture)
     N.SetBarTexture(b.power, appearance.barTexture)
     N.SetBarLossColor(b.health, appearance.healthLossColor)
@@ -395,40 +387,33 @@ function UF.LayoutBars(b)
     b.health:SetPoint("TOPLEFT", b, "TOPLEFT", snap(b, 1), snap(b, -1))
     b.health:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", snap(b, -1), snap(b, 1 + (ph > 0 and ph + 1 or 0)))
 
-    -- Text width comes from the configured frame width so long names truncate; one anchor plus an explicit width
-    -- lets the X/Y offsets move the text.
+    -- Explicit width from the frame width so long names truncate; one anchor lets X / Y move the text.
     local textW = N.db[b.groupKey].width - 6
     local name, hp = ind.name, ind.healthText
     styleText(b.nameText, name)
     styleText(b.hpText, hp)
     b.nameText:SetWidth(textW)
     b.hpText:SetWidth(textW)
-    -- Name and health text both sit in the middle by default and then stack
-    -- (name above, health below); anywhere else they are placed independently.
+    -- Name and health text stack in the middle by default; elsewhere they are placed independently.
     local stacked = pOn(b, "name", name.enabled) and pOn(b, "healthText", hp.enabled)
         and (name.position or "center") == "center" and (hp.position or "center") == "center"
     placeText(b.nameText, b.health, name, stacked and 6 or 0)
     placeText(b.hpText, b.health, hp, stacked and -6 or 0)
 
-    -- Power text sits on the health bar like the other texts (a 4px power bar is no place for
-    -- text), at one of the nine positions.
+    -- Power text sits on the health bar, since a 4px power bar has no room for text.
     b.powerText:SetFont(M.font, pb.textSize or 9, "OUTLINE")
-    -- No fixed width: the anchor alone decides where a short text sits, so left /
-    -- right positions can never depend on justification inside a wide box.
     b.powerText:SetWidth(0)
     placeText(b.powerText, b.health, { position = pb.textPosition, x = pb.textX, y = pb.textY })
     b.powerText:SetShown(pOn(b, "powerBar", pb.enabled) and b._powerShown and pb.text and pShow(b, "powerBar"))
 
-    -- Overlay bars need an explicit pixel width (plain Lua number, never
-    -- secret) since only one edge is anchored to health's fill texture.
+    -- Overlay bars need an explicit pixel width: only one edge is anchored to health's fill texture.
     local hw = b.health:GetWidth() or 0
     b.healPredict:SetWidth(hw)
     b.absorb:SetWidth(hw)
     b.absorbOver:SetWidth(hw)
     b.healAbsorb:SetWidth(hw)
 
-    -- Shield fill direction: normally it grows from the end of the health fill;
-    -- "inverted" grows from the right edge of the bar instead.
+    -- Shield fill direction: from the end of the health fill, or "inverted" from the right edge.
     b.absorb:ClearAllPoints()
     if appearance.absorb.invertFill then
         b.absorb:SetReverseFill(true)
@@ -446,7 +431,6 @@ function UF.LayoutBars(b)
     if N.Auras then N.Auras.Layout(b) end
 end
 
--- Data
 
 local IsSecret, AnySecret = N.IsSecret, N.AnySecret
 
@@ -474,10 +458,9 @@ local function readUnit(b)
     b.isTarget = (not IsSecret(tgt)) and tgt == true
 end
 
--- Rendering
 
--- Class color, a fixed custom color, or a red-yellow-green gradient (red at 0, yellow at 50 %, green at 100 %).
--- The gradient only does arithmetic on N.HealthFraction, which is nil when the value isn't safely known.
+-- Class color, fixed color or red-yellow-green gradient; the gradient only does arithmetic on N.HealthFraction
+-- (nil when unknown).
 local gradientCurve
 local function healthGradientCurve()
     if gradientCurve ~= nil then return gradientCurve or nil end
@@ -529,8 +512,7 @@ local function textRGB(b, o, fallback)
     return c[1], c[2], c[3]
 end
 
--- "12.3K". AbbreviateNumbers accepts secret numbers (the result may itself be
--- secret), so the string is only ever handed to a FontString, never inspected.
+-- AbbreviateNumbers accepts secret numbers; the result may be secret, so it only goes into a FontString.
 local function shortNum(v)
     if v == nil then return nil end
     local ok, s = pcall(Abbrev, v)
@@ -570,8 +552,7 @@ local function setDeficitText(b, fs)
     if s then fs:SetFormattedText("-%s", s) else fs:SetText("") end
 end
 
--- All health-text formats. Secret numbers can't be read but CAN be formatted
--- into a FontString, so every mode still shows something on Midnight.
+-- All health-text formats; secret numbers can't be read but can be formatted into a FontString.
 local function setHealthText(b, fs, o)
     local mode = o.format or "percent"
     if mode == "custom" then
@@ -622,8 +603,7 @@ local POWER_FALLBACK = {
     ESSENCE = { 0.20, 0.58, 0.50 },
 }
 local function powerRGB(b)
-    -- A hunter only ever has Focus: whatever the power type says, it gets Focus's amber
-    -- (never the yellow of Energy). Pets keep their own type.
+    -- Hunters always get Focus's amber, never Energy's yellow; pets keep their own type.
     local t = b.ppType
     if type(t) == "string" and not N.IsSecret(t) then
         local fb = POWER_FALLBACK[t]
@@ -690,13 +670,16 @@ local function render(b)
     local wantPower = pOn(b, "powerBar", ind.powerBar.enabled) and b._powerShown and pShow(b, "powerBar")
     if (wantPower and true or false) ~= (b.power:IsShown() and true or false) then UF.LayoutBars(b) end
 
-    -- Offline / Dead / ... is the Status indicator's own bar (Indicators.lua), it no longer takes
-    -- over the name and health text.
     local statusMsg = nil
 
     b.nameText:SetShown(pOn(b, "name", ind.name.enabled) and not statusMsg and pShow(b, "name"))
     if pOn(b, "name", ind.name.enabled) and not statusMsg then
-        b.nameText:SetText(N.Translit(N.ShortName(b.pName, ind.name.nameFormat)) or "")
+        local shown = N.Translit(N.ShortName(b.pName, ind.name.nameFormat)) or ""
+        local maxChars = ind.name.maxChars
+        if type(shown) == "string" and type(maxChars) == "number" and maxChars > 0 then
+            shown = limitChars(shown, maxChars)
+        end
+        b.nameText:SetText(shown)
         if (not b.connected) or b.dead then
             b.nameText:SetTextColor(M.color.textDim[1], M.color.textDim[2], M.color.textDim[3])
         else
@@ -720,8 +703,6 @@ local function render(b)
         setPowerText(b, b.powerText, ind.powerBar)
     end
 
-    -- heal prediction / absorb / heal-absorb: StatusBars on health's fill texture (see CreateVisual), which is what
-    -- keeps it secret-safe.
     if b._previewOnly or not b.connected then
         b.healPredict:Hide()
         b.absorb:Hide()
@@ -734,8 +715,7 @@ local function render(b)
         b.absorbOver:SetMinMaxValues(0, b.hpMax)
         b.healAbsorb:SetMinMaxValues(0, b.hpMax)
 
-        -- b.absorb takes the raw absorb amount, overlayClip keeps it inside the bar. The calculator
-        -- below only supplies the overflow flag for the overshield spark.
+        -- b.absorb takes the raw amount; the calculator below only supplies the overflow flag.
         local absorbAmt, overshield = b.absorbAmt, false
         if b.healCalc and b.unit and _G.UnitGetDetailedHealPrediction then
             local ok, _, over = pcall(function()
@@ -806,7 +786,6 @@ function UF.ApplyMock(b, m)
     render(b)
 end
 
--- Secure header wiring (real units)
 
 local function bindUnit(b)
     local unit = (b._secure or b):GetAttribute("unit")
@@ -862,16 +841,15 @@ local function onUpdate(b, elapsed)
 
     -- UnitInRange can return a secret boolean; SetAlphaFromBoolean takes it directly.
     local alpha = 1
-    -- Only the first return is used, the second ("was the range checked") can be missing and
-    -- would keep every frame at full alpha. You are never out of range of yourself.
+    -- Only the first return is used; the second can be missing and would keep every frame at full alpha.
     local inRange
     local me = UnitIsUnit(b.unit, "player")
     if me ~= nil and not N.IsSecret(me) and not me then me = UnitIsUnit(b.unit, "pet") end
     if me == nil or N.IsSecret(me) or not me then
         local checked
         inRange, checked = UnitInRange(b.unit)
-        -- Pets: UnitInRange often says "false" for a pet whose range it did not check at
-        -- all, so a pet only fades when the game says the range really was checked.
+        -- Pets: UnitInRange often says false for an unchecked range, so a pet only fades when the range was
+        -- really checked.
         if b.unit:find("pet") and not (checked ~= nil and not N.IsSecret(checked) and checked) then
             inRange = nil
         end
@@ -931,8 +909,8 @@ local function queueBind(b, what)
     end
 end
 
--- Header children are Blizzard's frames: nothing of ours is written into their tables. Our drawing lives on a
--- plain "visual" frame inside the secure button; the button only keeps clicks, attributes and hooks.
+-- Header children are Blizzard's frames: nothing of ours is written into their tables; drawing lives on a plain
+-- "visual" frame inside the secure button.
 local visualOf = setmetatable({}, { __mode = "k" })
 local plainStyled = setmetatable({}, { __mode = "k" })
 
@@ -1022,8 +1000,8 @@ local function forEachButton(fn)
 end
 UF.ForEachButton = forEachButton
 
--- Roster changes: a button keeps its unit token ("party2") while the person behind it changes, and no unit event
--- says so. Each button is checked against the GUID it last drew, deferred so it never runs in the header update.
+-- A button keeps its unit token while the person behind it changes; each button is checked against the GUID it
+-- last drew, deferred out of the header update.
 local rosterWatch = CreateFrame("Frame")
 rosterWatch:RegisterEvent("GROUP_ROSTER_UPDATE")
 local function checkGuids()
@@ -1048,8 +1026,7 @@ function N.RefreshAllButtons()
         UF.LayoutBars(child)
         if child:IsShown() then fullUpdate(child) end
     end)
-    -- A size change reaches the bars one frame later, so the overlay bar widths (read from the
-    -- health bar in LayoutBars) are measured again once the new size has settled.
+    -- A size change reaches the bars a frame later, so the overlay widths are measured again.
     if not relayoutPending then
         relayoutPending = true
         C_Timer.After(0, function()

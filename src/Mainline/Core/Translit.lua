@@ -16,12 +16,10 @@ local MAP = {
     ["Ч"] = "Ch", ["ч"] = "ch", ["Ш"] = "Sh", ["ш"] = "sh", ["Щ"] = "Shch", ["щ"] = "shch",
     ["Ъ"] = "", ["ъ"] = "", ["Ы"] = "Y", ["ы"] = "y", ["Ь"] = "", ["ь"] = "",
     ["Э"] = "E", ["э"] = "e", ["Ю"] = "Yu", ["ю"] = "yu", ["Я"] = "Ya", ["я"] = "ya",
-    -- Ukrainian/Belarusian letters that show up in realm names.
     ["Ґ"] = "G", ["ґ"] = "g", ["Є"] = "Ye", ["є"] = "ye", ["І"] = "I", ["і"] = "i",
     ["Ї"] = "Yi", ["ї"] = "yi", ["Ў"] = "U", ["ў"] = "u",
 }
 
--- Quick pre-check so names without Cyrillic skip the rebuild.
 local function hasCyrillic(s)
     return s:find("[\208-\211]") ~= nil
 end

@@ -1,17 +1,14 @@
 local _, ns = ...
 local N = ns.N
 
--- The classic clients carry some of the modern C_ APIs and not others, and what exists differs
--- between flavors. Everything the addon needs from them goes through this file: the client's own
--- function when there is one, the older global otherwise. The tables are private, the game's own
--- C_ tables are never touched.
+-- The classic clients carry some modern C_ APIs and not others, differing by flavor. Everything the addon needs
+-- goes through this file: the client's function when there is one, the older global otherwise.
 
 local Compat = {}
 N.Compat = Compat
 
 local C_Spell, C_SpellBook, C_Item = _G.C_Spell, _G.C_SpellBook, _G.C_Item
 
--- Spells
 
 local Spell = {}
 Compat.Spell = Spell
@@ -59,7 +56,6 @@ end
 
 Spell.IsSpellImportant = C_Spell and C_Spell.IsSpellImportant or nil
 
--- Spellbook
 
 local SpellBook = {}
 Compat.SpellBook = SpellBook
@@ -130,9 +126,8 @@ local function eachLegacy(fn)
     return n
 end
 
--- Calls fn(item, name, rank) for every active spell of the player's spellbook. item has
--- { spellID, iconID }; rank is the rank text ("Rank 3") or nil. Both spellbooks are tried; the
--- first one that yields spells wins.
+-- Calls fn(item, name, rank) for every active spell of the spellbook; item has { spellID, iconID }, rank is the
+-- rank text or nil. The first spellbook that yields spells wins.
 function SpellBook.Each(fn)
     -- Unless the spellbook shows "all ranks", only the highest rank of a spell is listed, but the
     -- lower ones are known and can be cast by name: Name(Rank n) resolves for each of them.
@@ -160,7 +155,6 @@ function SpellBook.Each(fn)
     pcall(eachLegacy, withLowerRanks)
 end
 
--- Items
 
 local Item = {}
 Compat.Item = Item

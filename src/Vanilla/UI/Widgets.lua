@@ -24,8 +24,7 @@ N.CARD_TOP = CARD_HEADER + ROW_GAP
 
 N.CONTENT_WIDTH = 512
 
--- Tooltip in the options window's own style: rounded card, shadow, accent title.
--- N.SetTip(widget, title, text, colorFn) hooks a widget; title / text may be strings or functions;
+-- Tooltip in the options window's style. N.SetTip(widget, title, text, colorFn): title / text may be functions;
 -- colorFn() -> {r,g,b} adds a color chip beside the title.
 
 local tip
@@ -149,7 +148,6 @@ function N.MakeCard(parent, title)
     return card
 end
 
--- Controls
 
 function N.MakeColorPicker(parent, label, get, set, desc)
     local f = CreateFrame("Button", nil, parent)
@@ -195,8 +193,6 @@ function N.MakeColorPicker(parent, label, get, set, desc)
     return f
 end
 
--- A 16px rounded box on the LEFT, label to its right. Unchecked: raised grey
--- with a hairline rim; checked: solid accent with a white tick.
 function N.MakeCheckbox(parent, label, get, set)
     local f = CreateFrame("Button", nil, parent)
     f._rowHeight = 22
@@ -242,9 +238,7 @@ function N.MakeCheckbox(parent, label, get, set)
     return f
 end
 
--- Label on the left, an editable value box on the right, and below them a
--- rounded track that fills with accent up to a round thumb. get()/set(v) in
--- real units.
+-- Label left, editable value box right, a rounded track below; get() / set(v) in real units.
 function N.MakeSlider(parent, label, minV, maxV, step, get, set)
     local f = CreateFrame("Frame", nil, parent)
     f._rowHeight = 38
@@ -263,7 +257,6 @@ function N.MakeSlider(parent, label, minV, maxV, step, get, set)
     slider:SetValueStep(step)
     slider:SetObeyStepOnDrag(true)
 
-    -- Capsule bars: a flat body plus half-circle end caps, so even a 5px bar has round ends.
     local BAR_H = 5
     local function capsule(layer, color, rightCap)
         local parts = {}
@@ -703,10 +696,8 @@ function N.MakeKeyCapture(parent, getText, onCapture)
     return b
 end
 
--- Icon picker: a compact dropdown whose entries carry icons, with a search box and a scrolling
--- list, for long lists (spells, macros, items).
---   getOptions() -> { { value, text, icon }, ... }   built each time it opens
---   resolve(value) -> text, icon   for a saved value that is not in the list
+-- Icon picker: a compact dropdown whose entries carry icons, with search and a scrolling list. getOptions() is
+-- rebuilt on each open; resolve(value) -> text, icon covers a saved value not in the list.
 
 local PICK_ROW, PICK_VISIBLE, PICK_MIN_W = 22, 9, 250
 local QUESTION_ICON = 134400
@@ -889,7 +880,8 @@ function N.MakeIconPicker(parent, getOptions, get, set, resolve)
     return f
 end
 
--- Custom scroll area: thin auto-hiding accent scrollbar with wheel support.
+-- Custom scroll area: thin auto-hiding accent scrollbar with wheel support; trackX moves the bar right of the
+-- area's edge (negative to tuck it inside a small panel).
 
 -- trackX: how far the bar sits right of the scroll area's edge (default 10, i.e.
 -- in the margin; pass a negative number to tuck it inside a small panel).

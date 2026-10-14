@@ -2,10 +2,8 @@ local _, ns = ...
 local N = ns.N
 local IsSecret = N.IsSecret
 
--- Actions: a short animation on a member's frame when they use a listed spell (potion, Healthstone, ...).
--- Display only, so global rather than per group. The spell ID of UNIT_SPELLCAST_SUCCEEDED can be hidden; such
--- casts are ignored. Animations (clipped to the frame): sweep (band rises), wipe (band moves left to right),
--- rise (the spell icon floats up and fades).
+-- Actions: a short animation on a member's frame when they use a listed spell. Display only, so global; hidden
+-- spell IDs are ignored. Animations: sweep, wipe, rise.
 
 local Actions = {}
 N.Actions = Actions
@@ -23,7 +21,6 @@ end
 
 local STRIPS = 10
 
--- Lays the strips out along the band's travel direction, faintest first.
 local function paintBand(set, c, vertical)
     local band = set.band
     for i, t in ipairs(set.strips) do

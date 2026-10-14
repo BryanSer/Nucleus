@@ -37,7 +37,6 @@ function N.StyleMover(a, label, text, target)
     end
 end
 
--- Only the group being edited gets a handle (the pet side counts as one group).
 function N.MoverWanted(key)
     local mode = N.db and N.db.editMode or "party"
     if N.PET_KEYS[key] then return N.PET_KEYS[mode] == true end
@@ -57,7 +56,6 @@ end
 
 N.PointXY = pointXY
 
--- The test mode draws its own handles over its own frames, the real ones stay hidden meanwhile.
 local function inTestMode()
     return N.TestMode and N.TestMode.IsActive and N.TestMode.IsActive() or false
 end

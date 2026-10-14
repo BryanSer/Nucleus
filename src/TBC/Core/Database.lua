@@ -10,7 +10,6 @@ local function InitDB()
         _G.NucleusDB_TBC = raw
     end
 
-    -- 0 for a new save; development builds carry a higher number and are renumbered.
     local fromVersion = raw.dbVersion or 0
 
     -- Profiles.Setup merges defaults and installs the N.db proxy. First, the old power bar switches (tanks /
@@ -89,6 +88,12 @@ local function InitDB()
         end
         N.db.blizzFilterOff = true
     end
+    -- One-time: the language used to default to German for everyone; it now follows the game client.
+    -- (German clients see no difference.)
+    if not N.db.localeAutoDefaulted then
+        if N.db.locale == "deDE" then N.db.locale = "auto" end
+        N.db.localeAutoDefaulted = true
+    end
     if not N.db.petAttachDefaulted then
         N.db.ownPet.attachEnabled = true
         N.db.groupPets.attachEnabled = true
@@ -107,7 +112,6 @@ N:On("ADDON_LOADED", function(_, name)
     end
 end)
 
--- party and raid are the real groups; own pet, group pets and NPC companions are the pet side.
 N.GROUP_KEYS = { party = true, raid = true, ownPet = true, groupPets = true, npc = true, spotlight = true }
 N.SPOTLIGHT_MAX = 10 -- most frames the spotlight group can show
 N.PET_KEYS = { ownPet = true, groupPets = true, npc = true }
@@ -124,7 +128,6 @@ function N:SetMode(mode)
     self:Fire("NUCLEUS_EDIT_MODE", mode)
 end
 
--- Saves a setting (dotted path) and notifies listeners, which key on the top-level section.
 function N:Set(path, value)
     local node = self.db
     local keys = { strsplit(".", path) }
@@ -133,4 +136,9 @@ function N:Set(path, value)
     end
     node[keys[#keys]] = value
     self:Fire("NUCLEUS_SETTING_CHANGED", keys[1], path, value)
+    if (keys[1] == "raid" or keys[1] == "party") and keys[2] and N.Profiles and N.Profiles.IsLinked
+        and N.Profiles.IsLinked(keys[2]) then
+        local other = (keys[1] == "raid") and "party" or "raid"
+        self:Fire("NUCLEUS_SETTING_CHANGED", other, other .. path:sub(#keys[1] + 1), value)
+    end
 end

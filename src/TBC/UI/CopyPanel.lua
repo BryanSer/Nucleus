@@ -80,12 +80,12 @@ local function doCopy()
         if state.sel["aura:" .. row.id] then copyKey(dst.auras, row.id, src.auras) end
     end
 
+    if N.Profiles.RelinkGroups then N.Profiles.RelinkGroups() end
     N:Fire("NUCLEUS_SETTING_CHANGED", to, to .. ".enabled", dst.enabled)
     N:Fire("NUCLEUS_SETTING_CHANGED", to, to .. ".width", dst.width)
     N:Fire("NUCLEUS_SETTING_CHANGED", to, to .. ".indicators.name.enabled")
     N:Fire("NUCLEUS_SETTING_CHANGED", to, to .. ".auras.buffs.enabled")
     N:Fire("NUCLEUS_SETTING_CHANGED", to, to .. ".appearance.barTexture")
-    -- Open option pages hold the old tables: have them rebuild.
     N:Fire("NUCLEUS_PROFILE_CHANGED", N.Profiles.Current())
     N:Print(L["COPY_DONE"]:format(L["MODE_" .. from], L["MODE_" .. to]))
 end

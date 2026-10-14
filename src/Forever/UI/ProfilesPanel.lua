@@ -3,15 +3,13 @@ local N = ns.N
 local M = N.Media
 local L = N.L
 
--- Options > Profile: manage profiles, auto-switch rules, export/import and backups. One panel
--- (cards stacked), rebuilt in place when the profile list, the active profile or the situation
--- changes.
+-- Options > Profile: profiles, auto-switch rules, export / import and backups; one panel, rebuilt in place when
+-- the list, the active profile or the situation changes.
 
 local function uc(c) return c[1], c[2], c[3], c[4] or 1 end
 
 local panel
 
--- small helpers
 
 local function Hint(card, text, color)
     local fs = N.FontString(card, 11)
@@ -85,13 +83,11 @@ local function MakeTextArea(parent, height)
     return box
 end
 
--- name prompt / confirm dialogs
 
 local function PromptName(text, default, onAccept)
     N.Dialog.Prompt(text, default, onAccept)
 end
 
--- export / import popups
 
 local exportPopup, importPopup
 
@@ -118,7 +114,6 @@ local function ShowExport()
         hint:SetText(L["EXPORT_HINT"])
         hint:SetHeight(hint:GetStringHeight() + 4)
         child:SetHeight(-child._y + hint:GetHeight() + 8)
-        -- read-only: restore the text if anything edits it
         area.edit:SetScript("OnTextChanged", function(self, user)
             if user and win.exportText and self:GetText() ~= win.exportText then
                 self:SetText(win.exportText)
@@ -229,8 +224,6 @@ local function ShowImport()
     importPopup.area.edit:SetFocus()
 end
 
--- Cell profile import: a Cell "Profile" export string becomes a new Nucleus profile (the mapping
--- lives in Core/CellImport.lua).
 
 local cellPopup
 
@@ -381,7 +374,6 @@ local function ShowCellImport()
     cellPopup.area.edit:SetFocus()
 end
 
--- the panel
 
 local function ProfileOptions(withNoChange)
     local out = {}

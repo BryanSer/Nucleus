@@ -4,9 +4,8 @@ local M = N.Media
 local Indicators = N.Indicators
 local IsSecret = N.IsSecret
 
--- Missing Buffs: an icon per raid buff a unit lacks, when someone in the group can provide it and the buff is
--- enabled. A hidden aura ID makes the answer unknown, so nothing is shown. The scan runs in a timer, not in the
--- header's update, and is cached on the button.
+-- Missing Buffs: an icon per raid buff a unit lacks while someone in the group can provide it. A hidden aura ID
+-- means unknown, so nothing is shown; the scan runs in a timer and is cached on the button.
 
 local BUFFS = {
     { key = "fortitude", label = "Power Word: Fortitude", class = "PRIEST",  ids = { 21562 } },

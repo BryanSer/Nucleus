@@ -48,8 +48,6 @@ local function styleIcon(obj, def, o)
     local s = o.size or 12
     obj:SetSize(s, s)
     obj:ClearAllPoints()
-    -- The player's chosen spot (one of the nine, lower-case) wins over the indicator's default
-    -- anchor.
     local anchor = o.position and o.position:upper() or def.anchor
     local dx, dy = 0, 0
     if anchor ~= "CENTER" then
@@ -59,8 +57,6 @@ local function styleIcon(obj, def, o)
     obj:SetPoint(anchor, obj:GetParent(), anchor, dx + (o.x or 0), dy + (o.y or 0))
 end
 
--- Default anchor of a registered icon indicator, lower-case ("topleft"), for the Position dropdown
--- before the player has picked one.
 function Indicators.DefaultPosition(name)
     for _, def in ipairs(registry) do
         if def.name == name and def.anchor then return def.anchor:lower() end
@@ -146,11 +142,9 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
     if N.RefreshAllButtons then N.RefreshAllButtons() end
 end)
 
--- Built-in indicators
 
--- Ordered metadata: one options sub-tab per entry. `format` = has a format dropdown. name /
--- healthText / powerBar / status are rendered by UnitFrame, the rest are icon modules registered
--- below.
+-- Ordered metadata: one options sub-tab per entry. name / healthText / powerBar / status are rendered by
+-- UnitFrame.
 Indicators.builtins = {
     { name = "name", label = "Name", text = true, positioned = true },
     { name = "healthText", label = "Health Text", text = true, format = true, positioned = true },
@@ -179,8 +173,7 @@ local function corner(button, point, size)
     return t
 end
 
--- Role icon art, hardcoded so it survives Blizzard removing helpers. "square" / "square2" are our tiles
--- (NucleusRoles.tga, 32px cells); "circle" is Blizzard's round role sheet (LFG-ICON-ROLES).
+-- Role icon art is hardcoded so it survives Blizzard removing helpers; "circle" is Blizzard's round role sheet.
 local ROLE_TC_SQUARE = {
     TANK    = { 0,    0.25, 0, 0.5 },
     HEALER  = { 0.25, 0.50, 0, 0.5 },
@@ -197,8 +190,7 @@ local ROLE_TC_CIRCLE = {
     DAMAGER = { 67 / 256, 134 / 256,  67 / 256, 134 / 256 },
 }
 
--- "Solo" for the role icon: no group, or a party made only of NPC companions (Brann in
--- Delves, follower dungeons) - the game counts those as a group.
+-- "Solo" for the role icon: no group, or only NPC companions (Brann, follower dungeons).
 local function playingSolo()
     if not IsInGroup() then return true end
     if IsInRaid() then return false end
@@ -235,7 +227,6 @@ Indicators.Register("role", {
             end
         end
 
-        -- Which roles get an icon at all, and optionally none while in combat.
         if (role == "TANK" and o.showTank == false)
             or (role == "HEALER" and o.showHealer == false)
             or (role == "DAMAGER" and o.showDamager == false) then
@@ -253,8 +244,7 @@ Indicators.Register("role", {
     end,
 })
 
--- Class / spec icon next to the role icon: one sheet (NucleusClassSpec.tga, 64px cells); "spec" falls back to
--- the class icon while the spec is unknown.
+-- Class / spec icon: one sheet (NucleusClassSpec.tga, 64px cells); "spec" falls back to the class icon.
 local function sheetCoords(cell)
     local cw = 1 / 8
     local x0, y0 = (cell % 8) * cw, math.floor(cell / 8) * cw
@@ -358,8 +348,7 @@ local function setReadyIcon(icon, key)
     icon:Show()
 end
 
--- The marks stay up while the check runs and a few seconds after it ends, then disappear on their
--- own.
+-- The marks stay up while the check runs and a few seconds after it ends.
 local READY_LINGER = 8
 local readyActive, readyUntil = false, nil
 local readyFrame = CreateFrame("Frame")
@@ -409,7 +398,6 @@ Indicators.Register("readyCheck", {
     end,
 })
 
--- Raid target marker
 
 Indicators.Register("raidMarker", {
     anchor = "TOP",
@@ -432,10 +420,8 @@ Indicators.Register("raidMarker", {
     end,
 })
 
--- Status Icon: cross-group, summon, phase. Accepted / declined summons drop off after a few seconds (`since`).
 
--- Accepted / declined summons show for a few seconds and then drop off. `since` is stamped the
--- first time a state is seen.
+-- Accepted / declined summons drop off after a few seconds; `since` is stamped when a state is first seen.
 local SUMMON_FADE = 6
 local function summonStillShown(b, key)
     local seen = b._summonSeen
@@ -458,8 +444,7 @@ local SUMMON_TEX = {
 }
 local COMBAT_TEX = "Interface\\CharacterFrame\\UI-StateIcon"
 
--- Everything the Status Icon can show, in priority order (first match wins). `show` in the
--- settings switches each key; the options page lists them from here.
+-- Everything the Status Icon can show, in priority order; `show` switches each key.
 Indicators.statusIconKinds = {
     { key = "otherParty",  label = "In another group",
       icons = { { tex = OTHER_PARTY_TEX, coord = OTHER_PARTY_TC } } },
@@ -493,8 +478,7 @@ local function setStatusAtlas(icon, atlas)
     icon:Show()
 end
 
--- UnitPhaseReason: 0 = plain phasing, 1 = sharding, 2 = war mode, 3 = Chromie Time. Tinted so the
--- reason is visible at a glance.
+-- UnitPhaseReason: 0 plain phasing, 1 sharding, 2 war mode, 3 Chromie Time; tinted per reason.
 local PHASE_COLOR = {
     [0] = { 1.00, 1.00, 1.00 },
     [1] = { 0.50, 1.00, 0.50 },
@@ -529,8 +513,8 @@ local function isShown(o, key)
     return not (o.show and o.show[key] == false)
 end
 
--- Aura-based kinds are looked up in a timer and cached as b._auraKind: update() runs inside the header's update,
--- where reading auras taints it, so update() only reads the cache.
+-- Aura-based kinds are looked up in a timer and cached as b._auraKind: reading auras inside the header update
+-- would taint it.
 local function refreshAuraKind(b, wantDead)
     if b._auraPending then return end
     b._auraPending = true
@@ -628,7 +612,6 @@ Indicators.Register("statusIcon", {
             if not IsSecret(rez) and rez then setStatusTex(icon, REZ_TEX); return end
         end
 
-        -- Aura lookups happen in a timer (see refreshAuraKind); only the cache is read here.
         local dead = UnitIsDeadOrGhost(u)
         local isDead = not IsSecret(dead) and dead
         if isDead or inBattleground() then refreshAuraKind(b) else b._auraKind = nil end
@@ -682,7 +665,6 @@ Indicators.Register("statusIcon", {
     end,
 })
 
--- Combat Icon: split from the Status Icon so it has its own placement.
 
 Indicators.Register("combatIcon", {
     anchor = "BOTTOMRIGHT",
@@ -703,7 +685,6 @@ Indicators.Register("combatIcon", {
     end,
 })
 
--- Target counter: how many group members are targeting this unit
 
 local function countTargeting(b)
     if b._mock then return b._mock.targetedBy or 0 end
@@ -746,8 +727,7 @@ Indicators.Register("targetCounter", {
     end,
 })
 
--- Status: a pill naming the unit's state (offline, AFK, dead, summon, ...) in per-state colors, with an optional
--- timer for Offline / AFK; each state can be switched off.
+-- Status: a pill naming the unit's state in per-state colors, with an optional timer for Offline / AFK.
 
 -- Priority order (first match wins), shared with the options and the preview.
 Indicators.statusStates = {
@@ -762,8 +742,7 @@ Indicators.statusStates = {
     { key = "summonDeclined", label = "Summon Declined" },
 }
 
--- Drink / food spells (spell IDs); matched by ID and by name, as the auras of
--- other players read differently across the game's versions.
+-- Drink / food spell IDs, matched by ID and by name (other players' auras read differently).
 local DRINK_IDS = { 170906, 167152, 430, 43182, 172786, 308433, 369162, 456574, 461063 }
 local drinkNames
 local function drinkSet()
@@ -845,7 +824,6 @@ local function statusState(b)
     return nil
 end
 
--- A unit's auras changed (the aura cache calls this): look for the drink again now.
 N:On("NUCLEUS_DB_READY", function()
     if not (N.AuraCache and N.AuraCache.OnChange) then return end
     N.AuraCache.OnChange(function(unit)
@@ -859,7 +837,6 @@ N:On("NUCLEUS_DB_READY", function()
     end)
 end)
 
--- "3:07" / "1:02:09"
 local function formatElapsed(sec)
     sec = math.max(0, math.floor(sec))
     local h = math.floor(sec / 3600)
@@ -1019,7 +996,6 @@ Indicators.Register("healthThresholds", {
     update = function(b, obj)
         local o = N.db[b.groupKey].indicators.healthThresholds
         local host = b.health or b
-        -- The lines are placed from the bar's width: place them again whenever it changes.
         if not obj.hooked and host.HookScript then
             obj.hooked = true
             host:HookScript("OnSizeChanged", function()
@@ -1037,8 +1013,7 @@ Indicators.Register("healthThresholds", {
         local fracs = {}
         for i, e in ipairs(sorted) do fracs[i] = math.max(0, math.min(100, e.pct or 0)) / 100 end
 
-        -- Which line(s) show, and how strongly: alphas[i] = 0..1, or a hidden-health
-        -- evaluation (alpha from the curve) when the numbers are not readable.
+        -- alphas[i] = 0..1, or a curve evaluation when the numbers are hidden.
         local alphas, evaluate
         if b._previewOnly == "healthThresholds" then
             alphas = {}
@@ -1094,8 +1069,7 @@ Indicators.Register("aggroBorder", {
         "UNIT_THREAT_SITUATION_UPDATE", "UNIT_THREAT_LIST_UPDATE",
         "PLAYER_REGEN_ENABLED", "PLAYER_REGEN_DISABLED",
     },
-    -- The four edges are plain textures on the button's overlay (not a child frame), so the target
-    -- / mouseover outline keeps drawing above them.
+    -- The edges are plain textures on the overlay so the target outline keeps drawing above them.
     create = function(b)
         local host = b.overlay or b
         local edges = {}
@@ -1146,8 +1120,7 @@ Indicators.Register("aggroBorder", {
         elseif b.unit then
             status = UnitThreatSituation(b.unit)
         end
-        -- Unknown or hidden (secret) threat shows nothing rather than guessing;
-        -- level 1 (yellow in Blizzard's scheme) is not shown either.
+        -- Unknown or secret threat shows nothing; level 1 (yellow) is not shown.
         if type(status) ~= "number" or IsSecret(status) or status < 2 then
             obj:Hide()
             return
@@ -1157,7 +1130,6 @@ Indicators.Register("aggroBorder", {
     end,
 })
 
--- Level text: the unit's level as "Level 80", "Lvl 80" or just "80".
 
 Indicators.Register("levelText", {
     events = { "UNIT_LEVEL", "PLAYER_LEVEL_UP", "GROUP_ROSTER_UPDATE" },

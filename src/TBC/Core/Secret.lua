@@ -1,9 +1,8 @@
 local _, ns = ...
 local N = ns.N
 
--- Secret values: on Midnight, combat-sensitive unit info comes back as a secret value when the
--- caller is tainted. Secrets can go to a few APIs (StatusBar:SetValue, SetMinMaxValues, ...), but
--- any arithmetic, comparison or string.format on one errors. This file guards against that.
+-- Secret values (Midnight): combat-sensitive unit info is secret when the caller is tainted. Secrets only go to
+-- a few APIs (SetValue, SetMinMaxValues, ...); arithmetic, comparison or string.format on one errors.
 
 local issecret  = _G.issecretvalue
 local anysecret = _G.hasanysecretvalues

@@ -51,7 +51,6 @@ local function groupDefaults(overrides)
         -- Own order (party / raid): roles in first / second / third order, `pinned` names always first.
         ordering = { enabled = false, first = "TANK", second = "HEALER", third = "DAMAGER", pinned = "" },
 
-        -- Player-made indicators (Indicators > "+"), see Frames/CustomIndicators.lua.
         customIndicators = { _list = true },
 
         appearance = {
@@ -74,10 +73,9 @@ local function groupDefaults(overrides)
             -- Dims the frame (outOfRangeAlpha) once health reaches the threshold.
             healthFade = { enabled = false, threshold = 1.0 },
         },
-        -- Every on-frame element is an entry: enabled, placement and its own fields.
         indicators = {
             custom     = { enabled = true },
-            name       = { enabled = true,  size = 11, x = 0, y = 0, color = { 0.92, 0.92, 0.94 }, position = "center", colorMode = "custom", outline = "thin",
+            name       = { enabled = true,  size = 11, x = 0, y = 0, color = { 0.92, 0.92, 0.94 }, position = "center", colorMode = "custom", outline = "thin", maxChars = 0,
                            nameFormat = "full" }, -- Forever: "full" (First Surname) | "first" | "last"
             -- "custom" format: {p} percent, {v} value, {m} max, {d} deficit.
             healthText = { enabled = true,  size = 10, x = 0, y = 0, color = { 0.85, 0.85, 0.87 },
@@ -108,20 +106,20 @@ local function groupDefaults(overrides)
                                summonPending = true, summonAccepted = true, summonDeclined = true,
                            } },
             -- Role icon: shape "square" | "circle", showTank / showHealer / showDamager.
-            role       = { enabled = true,  size = 11, x = 0, y = 0, shape = "square",
+            role       = { enabled = true,  position = "topleft", size = 11, x = 0, y = 0, shape = "square",
                            showTank = true, showHealer = true, showDamager = true, hideInCombat = false,
                            showSolo = true }, -- showSolo: your own role (from your spec) while not in a group
             -- Class / spec icon: mode "class" | "spec" | "both", off by default.
-            classSpec  = { enabled = false, size = 12, x = 13, y = 0, mode = "spec" },
-            leader     = { enabled = true,  size = 10, x = 0, y = 0 },
-            readyCheck = { enabled = true,  size = 16, x = 0, y = 0 },
-            raidMarker    = { enabled = true,  size = 14, x = 0,  y = 0 },
+            classSpec  = { enabled = false, position = "topleft", size = 12, x = 13, y = 0, mode = "spec" },
+            leader     = { enabled = true,  position = "topright", size = 10, x = 0, y = 0 },
+            readyCheck = { enabled = true,  position = "center", size = 16, x = 0, y = 0 },
+            raidMarker    = { enabled = true,  position = "top", size = 14, x = 0,  y = 0 },
             -- Status Icon: `show` = kinds that may appear (Indicators.statusIconKinds).
-            statusIcon    = { enabled = true,  size = 24, x = 0,  y = 0,
+            statusIcon    = { enabled = true,  position = "center", size = 24, x = 0,  y = 0,
                               show = { otherParty = true, incomingRez = true, rezDebuff = true,
                                        soulstone = true, summon = true, phase = true,
                                        bgFlag = true, bgOrb = true } },
-            combatIcon    = { enabled = true,  size = 12, x = -2, y = 2 },
+            combatIcon    = { enabled = true,  position = "bottomright", size = 12, x = -2, y = 2 },
             targetCounter = { enabled = false, size = 11, x = 0,  y = -2, color = { 1.00, 0.85, 0.30 } },
             -- Absorb Text: format = "short" (12K) | "full" (12,345) | "percent" of max health
             absorbText    = { enabled = false, size = 10, x = 0,  y = 8,  color = { 0.75, 0.90, 1.00 },
@@ -147,20 +145,19 @@ local function groupDefaults(overrides)
                               buffs = { fortitude = true, intellect = true, wild = true,
                                         shout = true, skyfury = true, bronze = true } },
         },
-        -- Aura rows: independent, anchored to a frame corner and grown in a chosen direction.
         auras = {
             buffs = {
                 enabled = false, max = 3, size = 15, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "TOPRIGHT", growth = "LEFT", x = 0, y = 0,
-                showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, onlyMine = true,
+                showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, stackPoint = "BOTTOMRIGHT", stackColor = { 1, 1, 1 }, timePoint = "CENTER", timeBaseColor = { 1, 1, 1 }, onlyMine = true,
                 -- useList: only spells in `list` (the options show your class); off = every buff.
-                useList = true,
+                useList = true, pickAll = false, -- pickAll: show the spells of every class in the picker
                 list = "1278914,33763,419207,1227806,8936,419287,774,419204,155777,474754,474750,48438,419344,355941,355936,382614,376788,364343,373267,366155,367364,409895,450769,450521,450711,450526,450531,1292922,124682,119611,115175,1260617,198533,156910,53563,200025,1244893,431381,156322,461432,432502,469703,194384,77489,17,1246768,1254306,1300008,41635,139,1253593,1300009,383648,974,444490,61295,360827,395152,395296,410089",
             },
             debuffs = {
                 enabled = true, max = 3, size = 18, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "BOTTOMLEFT", growth = "RIGHT", x = 0, y = 0,
-                showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, dispelBorder = true,
+                showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, stackPoint = "BOTTOMRIGHT", stackColor = { 1, 1, 1 }, timePoint = "CENTER", timeBaseColor = { 1, 1, 1 }, dispelBorder = true,
                 -- Filters: with showAll off only debuffs matching the ticked filters show (match = "any" | "all").
                 showAll = true, match = "any",
                 onlyNonPlayer = true, -- kept for older settings; castBy below is what counts
@@ -185,33 +182,33 @@ local function groupDefaults(overrides)
                 frameBorder = false, frameBorderThickness = 2,
                 typeIcons = true, typeIconSize = 12, typeIconPoint = "BOTTOMRIGHT",
                 typeIconGrowth = "LEFT", typeIconX = 0, typeIconY = 4,
-                showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, dispelBorder = true,
+                showStacks = true, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, stackPoint = "BOTTOMRIGHT", stackColor = { 1, 1, 1 }, timePoint = "CENTER", timeBaseColor = { 1, 1, 1 }, dispelBorder = true,
             },
             -- Cooldown rows: `list` = spell IDs. A hidden ID falls back to Blizzard's classification when `useFilter`
             -- is on. Defensives sit far left, externals far right.
             defensives = {
                 enabled = true, max = 2, size = 16, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "LEFT", growth = "RIGHT", x = 0, y = 6,
-                showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, useFilter = false,
+                showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, stackPoint = "BOTTOMRIGHT", stackColor = { 1, 1, 1 }, timePoint = "CENTER", timeBaseColor = { 1, 1, 1 }, useFilter = false,
                 list = "48707,444741,48792,55233,101568,212800,187827,207771,22812,22842,61336,1261872,404381,363916,374349,186265,264735,342246,45438,414658,449336,1309793,122783,115203,120954,125174,132578,322507,1241059,498,403876,642,31850,86659,212641,19236,47585,586,193065,27827,31224,5277,1966,185311,108271,260881,108416,104773,132413,387636,118038,184364,190456,1277297,147833,385391,871",
             },
             externals = {
                 enabled = true, max = 2, size = 16, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "RIGHT", growth = "LEFT", x = 0, y = 6,
-                showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, useFilter = false,
+                showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, stackPoint = "BOTTOMRIGHT", stackColor = { 1, 1, 1 }, timePoint = "CENTER", timeBaseColor = { 1, 1, 1 }, useFilter = false,
                 list = "102342,357170,53480,116849,1022,1309794,6940,204018,387804,47788,33206,145629,51052,209426,196718,374227,31821,317929,81782,62618,325174,98008,97463,97462",
             },
             offensives = {
                 enabled = false, max = 2, size = 18, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "BOTTOM", growth = "RIGHT", x = 0, y = 4,
-                showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1,
+                showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, stackPoint = "BOTTOMRIGHT", stackColor = { 1, 1, 1 }, timePoint = "CENTER", timeBaseColor = { 1, 1, 1 },
                 list = "1249658,152279,42650,51271,191427,321067,321068,162264,471306,1217605,473671,1217607,194223,102560,106951,102543,375087,186254,1235388,1285912,19574,288613,1250646,1251703,190319,365350,365362,1247908,1249625,31884,231895,454351,216331,10060,194249,13750,121471,1249810,114050,114051,114052,1219480,466772,442726,1276166,266087,417282,107574,1719,1225789,1241937,1265063,459808,1234189,185422,51690,394095,385627,13877,265187,205180,111685,446035,227847",
             },
             -- Crowd controls use Blizzard's CROWD_CONTROL filter, so there is no spell list.
             crowdControls = {
                 enabled = false, max = 3, size = 22, spacing = 2, perRow = 8, lineSpacing = 2,
                 point = "CENTER", growth = "RIGHT", x = 0, y = 0,
-                showStacks = false, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, dispellableOnly = false,
+                showStacks = false, showCooldown = true, cdStyle = "spiral", showTime = true, timeSize = 10, timeX = 0, timeY = 0, stackSize = 10, stackX = 1, stackY = -1, stackPoint = "BOTTOMRIGHT", stackColor = { 1, 1, 1 }, timePoint = "CENTER", timeBaseColor = { 1, 1, 1 }, dispellableOnly = false,
             },
         },
     }
@@ -258,7 +255,7 @@ N.Defaults = {
     -- Test Mode: sections previewed besides the one being edited (the menu next to the button)
     testSections = { party = false, raid = false, ownPet = false, groupPets = false, npc = false, spotlight = false },
 
-    locale = "deDE",
+    locale = "auto", -- "auto" follows the game client
     locked = true,
     moverMode = "always", -- how the move handle is dragged: always | alt
     moverSize = 100,
@@ -270,6 +267,13 @@ N.Defaults = {
     welcomeMessage = true, -- the "Nucleus loaded - version X" line in the chat at login / reload
     firstRunShown = false, -- the one-time welcome window has been shown
     blizzFilterOff = false, -- one-time migration: Blizzard-classification fallback switched off
+    -- One-time migrations (Core/Database.lua): the flag has to be listed here or the load prunes it.
+    timeColorDefaulted = false,
+    decimalsOffDefaulted = false,
+    glowDistanceReset = false,
+    glowProcRemoved = false,
+    localeAutoDefaulted = false,
+    petAttachDefaulted = false,
 
     -- Inline preview settings of the Indicators tab; global, an editing tool.
     previewSettings = {
@@ -309,6 +313,8 @@ N.Defaults = {
         groupFilter = { true, true, true, true, true, true, true, true },
         -- How many groups are shown at most (1-8): groups 1..maxGroups.
         maxGroups = 8,
+        -- Parts that use the Group's settings (see Profiles.lua): one switch per part.
+        link = { appearance = false, indicators = false, auras = false, customIndicators = false },
         groupNames = { enabled = false, position = "above", size = 11, x = 0, y = 0, color = { 1, 1, 1 } },
     }),
 

@@ -64,7 +64,6 @@ local function NewPanel(twoCol)
             self._colY[i] = self._colY[i] - card:GetHeight() - 14
             self:SetHeight(math.max(-self._colY[1], -self._colY[2]) + 10)
         end
-        -- A full-width heading between the two columns' cards.
         function p:AddSection(text)
             local y = math.min(self._colY[1], self._colY[2])
             if y < -8 then y = y - 6 end
@@ -211,7 +210,6 @@ local function BuildInterface(p)
     winCard:SetHeight(-winCard._y + accentHint:GetHeight() + N.CARD_PAD)
     p:AddCard(winCard)
 
-    -- Two font choices: the options window / dialogs, and every text on the unit frames.
     local fontOpts = {}
     for _, f in ipairs(M.FONTS) do
         fontOpts[#fontOpts + 1] = { value = f.key, text = f.key == "game" and L["Game default"] or f.text }
@@ -230,7 +228,6 @@ local function BuildInterface(p)
             N:Set("fontFrame", v)
             N.ApplyFontChoices()
             N.ApplyFontScale()
-            -- repaint the frames and aura rows with the new face
             for key in pairs(N.GROUP_KEYS) do
                 N:Fire("NUCLEUS_SETTING_CHANGED", key, key .. ".appearance.font")
                 N:Fire("NUCLEUS_SETTING_CHANGED", key, key .. ".auras.font")
@@ -267,7 +264,7 @@ local function BuildTooltip(p)
 end
 
 local function BuildPosition(p)
-    local c = N.MakeCard(p, L["Position"])
+    local c = N.MakeCard(p, L["Move handles"])
     c:AddRow(N.MakeCheckbox(c, L["Lock frames"],
         function() return N.db.locked end,
         function(v) N:Set("locked", v) end))
@@ -535,6 +532,13 @@ local function BuildLayout(p, key)
             function(v) N:Set(key .. ".spacing", N.Round(v)) end))
     end
     if key == "raid" or key == "groupPets" then
+        -- The gap between the columns (the raid groups when grouped by group); "Spacing" is the one inside a
+        -- column.
+        local cs = N.MakeSlider(size, L["Column spacing"], 0, 40, 1,
+            function() return N.db[key].columnSpacing or N.db[key].spacing end,
+            function(v) N:Set(key .. ".columnSpacing", N.Round(v)) end)
+        N.SetTip(cs, L["Column spacing"], L["COLSPACING_TIP"])
+        size:AddRow(cs)
         size:AddRow(N.MakeSlider(size, L["Units per column"], 1, 10, 1,
             function() return N.db[key].unitsPerColumn end,
             function(v) N:Set(key .. ".unitsPerColumn", N.Round(v)) end))
@@ -555,7 +559,12 @@ local function BuildLayout(p, key)
         size:SetHeight(-size._y + upc:GetHeight() + N.CARD_PAD)
     end
     p:AddCard(size)
+end
 
+-- Where the frames sit on the screen: position, anchoring to the owner / group frames, and copying
+-- the settings between Group and Raid.
+local function BuildFramePosition(p, key)
+    BuildPetSwitch(p, key)
     -- Where the group sits: an anchor point of the frames, placed at the same point of the screen
     -- plus an offset. A middle point (Top, Center, ...) makes the group grow from the middle.
     do
@@ -583,7 +592,6 @@ local function BuildLayout(p, key)
         local function refresh()
             for _, w in ipairs(widgets) do w.Refresh() end
         end
-        -- Moves the anchor point without moving the frames on screen.
         local function changePoint(new)
             local cfg = N.db[key]
             local old = cfg.point or "TOPLEFT"
@@ -648,7 +656,6 @@ local function BuildLayout(p, key)
         pos:SetHeight(-pos._y + hint:GetHeight() + N.CARD_PAD)
         p:AddCard(pos)
 
-        -- dragging the handle changes the numbers
         N:On("NUCLEUS_FRAME_MOVED", function(_, k)
             if k == key then refresh() end
         end)
@@ -695,6 +702,49 @@ local function BuildLayout(p, key)
         at:SetHeight(-at._y + ah:GetHeight() + N.CARD_PAD)
         p:AddCard(at)
     end
+
+    if key == "party" or key == "raid" then
+        local lk = N.MakeCard(p, L["LINK_TITLE"])
+        local PP = N.Profiles
+        for _, item in ipairs({
+            { "appearance", L["LINK_APPEARANCE"] },
+            { "indicators", L["LINK_INDICATORS"] },
+            { "auras", L["LINK_AURAS"] },
+            { "customIndicators", L["LINK_CUSTOM"] },
+        }) do
+            lk:AddRow(N.MakeCheckbox(lk, item[2],
+                function() return PP.IsLinked(item[1]) end,
+                function(v) PP.SetLink(item[1], v) end))
+        end
+        local lh = N.FontString(lk, 11)
+        lh:SetPoint("TOPLEFT", lk, "TOPLEFT", N.CARD_PAD, lk._y)
+        lh:SetWidth(lk:GetWidth() - 2 * N.CARD_PAD)
+        lh:SetJustifyH("LEFT")
+        lh:SetTextColor(uc(M.color.textDim))
+        lh:SetText(L["LINK_HINT"])
+        lh:SetHeight(lh:GetStringHeight() + 4)
+        lk:SetHeight(-lk._y + lh:GetHeight() + N.CARD_PAD)
+        p:AddCard(lk)
+    end
+
+    local cc = N.MakeCard(p, L["Copy settings between Party and Raid"])
+    local cb = CreateFrame("Button", nil, cc)
+    cb._rowHeight = 28
+    N.SkinButton(cb)
+    local ct = N.FontString(cb, 12)
+    ct:SetPoint("CENTER")
+    ct:SetText(L["Open copy window"])
+    cb:SetScript("OnClick", function() N.ShowCopyPopup() end)
+    cc:AddRow(cb)
+    local ch = N.FontString(cc, 11)
+    ch:SetPoint("TOPLEFT", cc, "TOPLEFT", N.CARD_PAD, cc._y)
+    ch:SetWidth(cc:GetWidth() - 2 * N.CARD_PAD)
+    ch:SetJustifyH("LEFT")
+    ch:SetTextColor(uc(M.color.textDim))
+    ch:SetText(L["COPY_HINT"])
+    ch:SetHeight(ch:GetStringHeight() + 4)
+    cc:SetHeight(-cc._y + ch:GetHeight() + N.CARD_PAD)
+    p:AddCard(cc)
 end
 
 local function BuildRange(p, key)
@@ -963,8 +1013,6 @@ local function BuildIndicator(p, key, meta)
     local o = N.db[key].indicators[meta.name]
     local function pth(f) return base .. "." .. f end
 
-    -- The preview is not part of the scrolling panel: SelectSub pins it above the
-    -- scroll area so it stays in view while the settings scroll.
     if N.Preview then p.previewHost = N.Preview.Create(p, meta.name) end
 
     local c = N.MakeCard(p, L[meta.label])
@@ -1079,8 +1127,6 @@ local function BuildIndicator(p, key, meta)
             function() return o.thickness end, function(v) N:Set(pth("thickness"), N.Round(v)) end))
         c:AddRow(N.MakeCheckbox(c, L["Fade inward"],
             function() return o.gradient end, function(v) N:Set(pth("gradient"), v) end))
-        -- One picker per threat level, with a dim note on the right saying what
-        -- the colour stands for.
         local function colorRow(label, note, key)
             local row = N.MakeColorPicker(c, label,
                 function() return o[key] end, function(v) N:Set(pth(key), v) end)
@@ -1153,6 +1199,10 @@ local function BuildIndicator(p, key, meta)
                 { value = "thick", text = L["Thick outline"] },
                 { value = "none", text = L["None"] },
             }, function() return o.outline or "thin" end, function(v) N:Set(pth("outline"), v) end))
+        end
+        if meta.name == "name" then
+            c:AddRow(N.MakeSlider(c, L["Max characters (0 = no limit)"], 0, 20, 1,
+                function() return o.maxChars or 0 end, function(v) N:Set(pth("maxChars"), N.Round(v)) end))
         end
         c:AddRow(N.MakeSlider(c, L["X offset"], -40, 40, 1,
             function() return o.x end, function(v) N:Set(pth("x"), N.Round(v)) end))
@@ -1299,6 +1349,18 @@ local AURA_TITLES = {
     externals = "External Cooldowns", offensives = "Offensive Cooldowns",
     crowdControls = "Crowd Controls",
 }
+
+local function textAnchors()
+    local out = {}
+    for _, e in ipairs({
+        { "TOPLEFT", "Top Left" }, { "TOP", "Top" }, { "TOPRIGHT", "Top Right" },
+        { "LEFT", "Left" }, { "CENTER", "Center" }, { "RIGHT", "Right" },
+        { "BOTTOMLEFT", "Bottom Left" }, { "BOTTOM", "Bottom" }, { "BOTTOMRIGHT", "Bottom Right" },
+    }) do
+        out[#out + 1] = { value = e[1], text = L[e[2]] }
+    end
+    return out
+end
 
 local function BuildAuras(p, key, kind)
     local o = N.db[key].auras[kind]
@@ -1477,6 +1539,10 @@ local function BuildAuras(p, key, kind)
         function() return o.showTime end, function(v) N:Set(pth("showTime"), v) end))
     tc:AddRow(N.MakeSlider(tc, L["Size"], 6, 24, 1,
         function() return o.timeSize end, function(v) N:Set(pth("timeSize"), N.Round(v)) end))
+    tc:AddRow(N.MakeDropdown(tc, L["Anchor point"], textAnchors(),
+        function() return o.timePoint or "CENTER" end, function(v) N:Set(pth("timePoint"), v) end))
+    tc:AddRow(N.MakeColorPicker(tc, L["Color"],
+        function() return o.timeBaseColor or { 1, 1, 1 } end, function(v) N:Set(pth("timeBaseColor"), v) end))
     tc:AddRow(N.MakeSlider(tc, L["X offset"], -30, 30, 1,
         function() return o.timeX end, function(v) N:Set(pth("timeX"), N.Round(v)) end))
     tc:AddRow(N.MakeSlider(tc, L["Y offset"], -30, 30, 1,
@@ -1488,6 +1554,10 @@ local function BuildAuras(p, key, kind)
         function() return o.showStacks end, function(v) N:Set(pth("showStacks"), v) end))
     sc:AddRow(N.MakeSlider(sc, L["Size"], 6, 24, 1,
         function() return o.stackSize end, function(v) N:Set(pth("stackSize"), N.Round(v)) end))
+    sc:AddRow(N.MakeDropdown(sc, L["Anchor point"], textAnchors(),
+        function() return o.stackPoint or "BOTTOMRIGHT" end, function(v) N:Set(pth("stackPoint"), v) end))
+    sc:AddRow(N.MakeColorPicker(sc, L["Color"],
+        function() return o.stackColor or { 1, 1, 1 } end, function(v) N:Set(pth("stackColor"), v) end))
     sc:AddRow(N.MakeSlider(sc, L["X offset"], -30, 30, 1,
         function() return o.stackX end, function(v) N:Set(pth("stackX"), N.Round(v)) end))
     sc:AddRow(N.MakeSlider(sc, L["Y offset"], -30, 30, 1,
@@ -1519,8 +1589,6 @@ local function BuildAuras(p, key, kind)
         lc._y = lc._y - note:GetHeight() - 8
         lc:SetHeight(-lc._y + N.CARD_PAD)
 
-        -- Every known spell of this row as an icon; ticked = shown. The saved
-        -- list holds only the ticked IDs. Your own IDs are appended as extra icons.
         local function parse(str)
             local out = {}
             for tok in (str or ""):gmatch("%d+") do out[#out + 1] = tonumber(tok) end
@@ -2044,8 +2112,6 @@ local function BuildCustom(p, mode, id)
             checkbox(track, L["Remove from Buffs"], "hideFromBuffs")
         end
 
-        -- Suggested spells (your class first, other classes on request) as
-        -- icons to tick; spells added by hand show up as ticked icons too.
         local items, known, on = {}, {}, {}
         local function add(sid) if not known[sid] then known[sid] = true; items[#items + 1] = sid end end
         for _, sid in ipairs(N.CustomIndicators.Suggestions(entry.aura)) do add(sid) end
@@ -2182,7 +2248,6 @@ local function BuildCustom(p, mode, id)
             end
             position(look)
         elseif kind == "text" then
-            -- Older entries used a "stack count" mode: it is the text {stacks} now.
             if entry.textKind == "stacks" then entry.textKind = "fixed"; entry.text = "{stacks}" end
             look:AddRow(N.MakeDropdown(look, L["Text shows"], {
                 { value = "fixed", text = L["Own text"] },
@@ -2283,6 +2348,10 @@ local function BuildCustom(p, mode, id)
             }, function() return entry.cdStyle or "spiral" end, function(v) set("cdStyle", v) end))
             checkbox(tc, L["Show time on icon"], "showTime")
             slider(tc, L["Size"], "timeSize", 6, 24)
+            tc:AddRow(N.MakeDropdown(tc, L["Anchor point"], textAnchors(),
+                function() return entry.timePoint or "CENTER" end, function(v) set("timePoint", v) end))
+            tc:AddRow(N.MakeColorPicker(tc, L["Color"],
+                function() return entry.timeBaseColor or { 1, 1, 1 } end, function(v) set("timeBaseColor", v) end))
             slider(tc, L["X offset"], "timeX", -30, 30)
             slider(tc, L["Y offset"], "timeY", -30, 30)
             p:AddCard(tc)
@@ -2290,6 +2359,10 @@ local function BuildCustom(p, mode, id)
             local sc = N.MakeCard(p, L["Stacks"])
             checkbox(sc, L["Show stacks"], "showStacks")
             slider(sc, L["Size"], "stackSize", 6, 24)
+            sc:AddRow(N.MakeDropdown(sc, L["Anchor point"], textAnchors(),
+                function() return entry.stackPoint or "BOTTOMRIGHT" end, function(v) set("stackPoint", v) end))
+            sc:AddRow(N.MakeColorPicker(sc, L["Color"],
+                function() return entry.stackColor or { 1, 1, 1 } end, function(v) set("stackColor", v) end))
             slider(sc, L["X offset"], "stackX", -30, 30)
             slider(sc, L["Y offset"], "stackY", -30, 30)
             p:AddCard(sc)
@@ -2406,8 +2479,6 @@ local function itemApi()
     return spell, info
 end
 
--- The name of what sits in an equipment slot (from the item, or from its link while the item data
--- is not loaded yet).
 local function slotItem(slot)
     local id = GetInventoryItemID("player", slot)
     if not id then return nil end
@@ -2523,11 +2594,9 @@ end
 local CC_KEY_W, CC_KIND_W, CC_DEL_W, CC_GAP = 150, 84, 24, 6
 
 local function BuildBindingRow(card, cc, binding, i, rebuild)
-    -- Fold the bare kinds an earlier build saved into the General kind.
     if PLAIN_KINDS[binding.kind] then
         binding.value, binding.kind = binding.kind, "general"
     end
-    -- The short-lived Trinket kinds became items picked by slot.
     if binding.kind == "trinket1" or binding.kind == "trinket2" then
         binding.value = (binding.kind == "trinket1") and "slot:13" or "slot:14"
         binding.kind = "item"
@@ -2870,7 +2939,6 @@ local function BuildSpotlight(p)
             table.remove(list, i)
             save(list)
         end)
-        -- order: the list is the order of the frames
         local count = #(cfg.units or {})
         for step, dir in ipairs({ 1, -1 }) do
             local mv = CreateFrame("Button", nil, row)
@@ -2917,7 +2985,6 @@ local function BuildSpotlight(p)
     p:AddCard(ac)
 end
 
--- Tab model
 
 local TABS
 
@@ -2950,7 +3017,6 @@ local function BuildTabModel()
 
     TABS = {
         { id = "general", label = L["General"], flow = true, subs = {
-            -- the same in every profile (stored outside the profile)
             { id = "allprofiles", label = L["General"],
               build = function(p)
                   p:AddSection(L["SECTION_ALL_PROFILES"])
@@ -2958,7 +3024,6 @@ local function BuildTabModel()
                   BuildPosition(p)
                   BuildProfileScope(p)
               end },
-            -- changes with the profile
             { id = "overview", label = L["Overview"], perMode = true,
               build = function(p, mode)
                   p:AddSection(L["SECTION_PER_PROFILE"])
@@ -2973,6 +3038,10 @@ local function BuildTabModel()
               build = function(p, mode) BuildRange(p, mode) end },
             { id = "color", label = L["Color"], perMode = true,
               build = function(p, mode) BuildColor(p, mode) end },
+        } },
+        { id = "position", label = L["Position"], flow = true, subs = {
+            { id = "position", label = L["Position"], perMode = true,
+              build = function(p, mode) BuildFramePosition(p, mode) end },
         } },
         { id = "indicators", label = L["Indicators"], subs = indicatorSubs },
         { id = "clickcasting", label = L["Click-Casting"], flow = "single", subs = {
@@ -3005,8 +3074,6 @@ local function FindTab(id)
     for _, t in ipairs(TABS) do if t.id == id then return t end end
 end
 
--- The Indicators rail ends with the custom indicators of the group being edited
--- and the "+" entry; rebuilt whenever the list, the group or the profile changes.
 local function SyncCustomSubs()
     local tab = FindTab("indicators")
     local subs = tab.subs
@@ -3070,7 +3137,6 @@ local function GetFlowPanel(tab)
     return p
 end
 
--- Selection
 
 local function HidePreviews()
     for _, p in pairs(panelCache) do
@@ -3099,8 +3165,6 @@ local function SelectSub(tabId, subId)
     activeSub = subId
     lastSubOf[tabId] = subId
 
-    -- A page with a preview pins it at the top of the content area and starts
-    -- the scrolling settings below it.
     local top = BODY_TOP
     local host = shown.previewHost
     if host then
@@ -3360,7 +3424,6 @@ RefreshMode = function()
 end
 N.RefreshMode = RefreshMode
 
--- Window chrome
 
 -- Segmented tab: rounded pill, accent while selected; holding a tab drags the window, a click selects it.
 local function MakeTabButton(parent)
@@ -3488,7 +3551,6 @@ local function BuildModeBar()
     test:SetScript("OnClick", function()
         if N.TestMode then N.TestMode.Toggle() end
     end)
-    -- The small arrow beside it: which sections the test mode shows besides the one being edited.
     local more = CreateFrame("Button", nil, window)
     more:SetSize(22, 26)
     more:SetPoint("LEFT", test, "RIGHT", 2, 0)
@@ -3590,8 +3652,6 @@ local function BuildStats()
     statsText:SetTextColor(uc(M.color.textDim))
 end
 
--- Round "x" close button shared by the main window and the popups: a grey cross that turns the
--- whole pill red on hover.
 local function MakeCloseButton(parent, target)
     local close = CreateFrame("Button", nil, parent)
     close:SetSize(24, 24)
@@ -3700,8 +3760,6 @@ local function BuildWindow()
     RefreshMode()
 end
 
--- Ping settings popup: a small standalone window (not part of the tab system), opened from a
--- button under General > Overview.
 
 local POPUP_W = 340
 

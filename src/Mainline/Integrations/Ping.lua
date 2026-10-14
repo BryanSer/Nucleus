@@ -1,12 +1,10 @@
 local _, ns = ...
 local N = ns.N
 
--- Retail only: pulses a Nucleus frame when a groupmate pings that unit. Blizzard's ping events are protected
--- (RegisterEvent is ADDON_ACTION_FORBIDDEN) and its icon template lives in a forbidden scope, so we mirror
--- instead of listening: Blizzard builds a ping icon (`.pingIconFrame`) into every compact unit frame, a
--- hooksecurefunc on its ShowPing / ClearPing gives the texture kit, and the icon owner's `.unit` says which
--- Nucleus button to pulse. Needs the hidden compact frames to keep their events (HideBlizzard skips stripping
--- while Ping is on; turning it on afterwards needs a /reload) and the showPingsOnRaidFrames CVar (EnsurePingCVar).
+-- Retail only: pulses a Nucleus frame when a groupmate pings that unit. Blizzard's ping events are protected,
+-- so its ping icon (.pingIconFrame on every compact unit frame) is mirrored: hooksecurefunc on ShowPing /
+-- ClearPing gives the texture kit, the icon owner's .unit picks the button. HideBlizzard skips event stripping
+-- while Ping is on (a /reload applies it); the showPingsOnRaidFrames CVar must be on.
 
 local Ping = {}
 N.Ping = Ping
@@ -16,7 +14,6 @@ local SAFETY_EXPIRE = 20 -- seconds; covers a missed ClearPing if a frame is rec
 local activePings = {}   -- guid -> texture kit
 local expireTokens = {}  -- guid -> generation, to invalidate a stale safety timer
 
--- The real Blizzard ping icon on a Nucleus button
 
 -- Blizzard's own ping art, referenced by atlas name (built into the client). "kit" is the ping
 -- type Blizzard hands back: Attack, Warning, OnMyWay, ...
@@ -85,8 +82,6 @@ local function findButtonForUnit(unit)
     return match
 end
 
--- Live preview for the Ping Settings popup: a persistent icon on the player's own frame so
--- size/position can be tuned without pinging anyone.
 
 local PREVIEW_KIT = "NonThreat"
 local previewActive = false
@@ -110,7 +105,6 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
     end
 end)
 
--- GUID plumbing
 
 local function safeGUID(unit)
     if not unit then return nil end
@@ -119,7 +113,6 @@ local function safeGUID(unit)
     return guid
 end
 
--- Hooking Blizzard's own (hidden) ping icons
 
 local DEBUG = false
 
@@ -173,17 +166,14 @@ local function hookOwner(frame)
     if frame and frame.pingIconFrame then hookIcon(frame.pingIconFrame) end
 end
 
--- Every compact frame Blizzard may already have built. Cheap and guarded per
--- icon, safe to re-run on every roster change.
 local function sweepBlizzardFrames()
     for i = 1, 5 do hookOwner(_G["CompactPartyFrameMember" .. i]) end
     for i = 1, 40 do hookOwner(_G["CompactRaidFrame" .. i]) end
     for g = 1, 8 do
         for m = 1, 5 do hookOwner(_G["CompactRaidGroup" .. g .. "Member" .. m]) end
     end
-    -- Self/target/focus pings don't go through the compact-frame system (a solo player has no
-    -- CompactPartyFrameMember with a unit); they land on Blizzard's classic PlayerFrame /
-    -- TargetFrame / FocusFrame, which carry their own .pingIconFrame.
+    -- Self / target / focus pings land on Blizzard's classic PlayerFrame / TargetFrame / FocusFrame, which
+    -- carry their own .pingIconFrame.
     hookOwner(_G.PlayerFrame)
     hookOwner(_G.TargetFrame)
     hookOwner(_G.FocusFrame)
@@ -193,8 +183,6 @@ local setupHooked = false
 local function installSetupHooks()
     if setupHooked then return end
     setupHooked = true
-    -- Blizzard runs these on every compact frame it configures, catching new
-    -- raid frames as they're created without waiting for the next sweep.
     if type(_G.DefaultCompactUnitFrameSetup) == "function" then
         hooksecurefunc("DefaultCompactUnitFrameSetup", hookOwner)
     end

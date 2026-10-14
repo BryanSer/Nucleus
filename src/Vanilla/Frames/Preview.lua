@@ -16,8 +16,6 @@ local TITLE_H = 20
 
 local instances = {}
 
--- Previews that step through several states so one frame shows them all: the mock fields for each
--- step.
 local ROTATING = {
     status = {
         { connected = false },
@@ -119,8 +117,6 @@ local function freshMock(filter, stateKey)
         },
     }
     local ps = N.db and N.db.previewSettings
-    -- Static health % (default 100) while the cycle isn't running. Applied before the demo
-    -- overrides below, so e.g. Status's "show Dead" example still works at whatever % is set.
     if ps and not ps.cycleHealth then m.hp = ps.healthPercent or 100 end
 
     local rot = ROTATING[filter]
@@ -136,8 +132,6 @@ local function freshMock(filter, stateKey)
         m.dispels = fresh
     end
 
-    -- Cycle Health overrides everything above, so every indicator sweeps through the same health
-    -- changes at once.
     if ps and ps.cycleHealth then
         local hp = HEALTH_CYCLE[healthCycleIdx] or 100
         m.hp = hp
@@ -151,8 +145,6 @@ local function frameSize()
     return (cfg and cfg.width) or 120, (cfg and cfg.height) or 50
 end
 
--- Builds a preview card masked to `subId` (unless "show all enabled" is on) and returns the
--- sized host frame, ready for p:AddCard(host) above that indicator's settings.
 function P.Create(parent, subId, customId)
     local fw, fh = frameSize()
     local host = CreateFrame("Frame", nil, parent)
@@ -213,8 +205,6 @@ function P.Create(parent, subId, customId)
     host:SetScript("OnShow", inst.refresh)
     inst.refresh()
 
-    -- Cycle through every possible Status state so the one preview frame shows all of them over
-    -- time.
     if ROTATING[subId] then
         local ticker
         host:SetScript("OnShow", function()
@@ -246,8 +236,6 @@ local function refreshAll()
 end
 P.RefreshAll = refreshAll
 
--- One shared ticker for the health cycle, started/stopped as it's toggled; drives every open
--- preview through refreshAll.
 local function syncHealthTicker()
     local want = N.db and N.db.previewSettings and N.db.previewSettings.cycleHealth
     if want and not healthTicker then

@@ -2,10 +2,8 @@ local _, ns = ...
 local N = ns.N
 local IsSecret = N.IsSecret
 
--- Specializations of group members, for the Class / Spec icon. Your own comes from the talent API.
--- Others are read with the inspect call, one at a time (the server throttles it), out of combat
--- and only while an indicator needs it. Results are cached by GUID and re-read after a few
--- minutes.
+-- Group members' specializations for the Class / Spec icon: your own from the talent API, others via the
+-- inspect call one at a time, out of combat and only while needed; cached by GUID.
 
 local GS = {}
 N.GroupSpec = GS
@@ -42,7 +40,6 @@ function GS.Get(unit)
     return e and e.spec or nil
 end
 
--- A plausible spec for sample frames: the first one of the class that fits the role.
 local mockMemo = {}
 function GS.MockSpec(class, role)
     local key = tostring(class) .. "/" .. tostring(role)
@@ -71,7 +68,6 @@ local function refreshAll()
     N.UnitFrame.ForEachButton(function(b) N.Indicators.UpdateOne(b, "classSpec") end)
 end
 
--- Next member worth inspecting: never-read first, then stale ones.
 local function nextTarget()
     local raid = IsInRaid()
     local count = GetNumGroupMembers()
