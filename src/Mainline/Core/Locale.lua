@@ -6,6 +6,7 @@ local N = ns.N
 local base = {}
 local overrides = {}
 local strings = base
+local reverse
 
 N.L = setmetatable({}, {
     __index = function(_, key)
@@ -22,7 +23,20 @@ function N.RegisterLocale(locale, tbl, isBase)
     for k, v in pairs(tbl) do overrides[locale][k] = v end
 end
 
+-- The English text of a (translated) string, for searching in either language.
+function N.EnglishOf(text)
+    if not reverse then
+        reverse = {}
+        for key, en in pairs(base) do
+            local loc = strings[key] or en
+            if type(loc) == "string" and not reverse[loc] then reverse[loc] = en end
+        end
+    end
+    return reverse[text]
+end
+
 function N.ApplyLocale(locale)
+    reverse = nil
     if locale == "auto" or not locale then locale = GetLocale() end
     if overrides[locale] then
         strings = setmetatable({}, { __index = base })

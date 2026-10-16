@@ -46,9 +46,16 @@ end
 local function styleIcon(obj, def, o)
     if not (obj and obj.SetSize and def.anchor) then return end
     local s = o.size or 12
+    local anchor = o.position and o.position:upper() or def.anchor
+    local ox, oy, parent = o.x or 0, o.y or 0, obj:GetParent()
+    -- Only touch the layout when a setting changed.
+    if obj._styleSize == s and obj._styleAnchor == anchor and obj._styleX == ox and obj._styleY == oy
+        and obj._styleParent == parent then
+        return
+    end
+    obj._styleSize, obj._styleAnchor, obj._styleX, obj._styleY, obj._styleParent = s, anchor, ox, oy, parent
     obj:SetSize(s, s)
     obj:ClearAllPoints()
-    local anchor = o.position and o.position:upper() or def.anchor
     local dx, dy = 0, 0
     if anchor ~= "CENTER" then
         dx = anchor:find("LEFT") and 1 or anchor:find("RIGHT") and -1 or 0
@@ -95,19 +102,24 @@ function Indicators.UpdateAll(button)
 end
 
 local function dispatch(event, unit)
-    for _, header in pairs(N.headers) do
-        local i, child = 1, _G[header:GetName() .. "UnitButton1"]
-        while child do
-            local b = N.UnitFrame.ButtonOf(child)
-            if b and b:IsShown() then
-                if not unit or b.unit == unit then
-                    for _, def in ipairs(byEvent[event] or {}) do
-                        runUpdate(b, def)
-                    end
-                end
+    local defs = byEvent[event]
+    if not defs then return end
+    local UF = N.UnitFrame
+    if unit then
+        local set = UF.ButtonsOfUnit(unit)
+        if not set then return end
+        for b in pairs(set) do
+            if b:IsShown() then
+                for i = 1, #defs do runUpdate(b, defs[i]) end
             end
-            i = i + 1
-            child = _G[header:GetName() .. "UnitButton" .. i]
+        end
+    else
+        local all = UF.AllButtons()
+        for n = 1, #all do
+            local b = all[n]
+            if b:IsShown() then
+                for i = 1, #defs do runUpdate(b, defs[i]) end
+            end
         end
     end
 end
@@ -411,7 +423,7 @@ Indicators.Register("raidMarker", {
     update = function(b, icon)
         local idx
         if b._mock then idx = b._mock.raidMarker else idx = b.unit and GetRaidTargetIndex(b.unit) end
-        if type(idx) == "number" and idx >= 1 and idx <= 8 then
+        if type(idx) == "number" and not IsSecret(idx) and idx >= 1 and idx <= 8 then
             SetRaidTargetIconTexture(icon, idx)
             icon:Show()
         else

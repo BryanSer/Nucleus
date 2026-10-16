@@ -56,21 +56,23 @@ local function apply(entries)
 end
 
 function GL.Update()
-    local header = N.headers and N.headers.raid
-    if not header then return end
+    local headers = N.RaidHeaders and N.RaidHeaders() or {}
+    if #headers == 0 then return end
     local entries = {}
-    local i, child = 1, _G[header:GetName() .. "UnitButton1"]
-    while child do
-        local group
-        local unit = child:GetAttribute("unit")
-        local idx = type(unit) == "string" and tonumber(unit:match("^raid(%d+)$"))
-        if idx and IsInRaid() then
-            local g = select(3, GetRaidRosterInfo(idx))
-            if g ~= nil and not IsSecret(g) then group = g end
+    for _, header in ipairs(headers) do
+        local i, child = 1, _G[header:GetName() .. "UnitButton1"]
+        while child do
+            local group
+            local unit = child:GetAttribute("unit")
+            local idx = type(unit) == "string" and tonumber(unit:match("^raid(%d+)$"))
+            if idx and IsInRaid() then
+                local g = select(3, GetRaidRosterInfo(idx))
+                if g ~= nil and not IsSecret(g) then group = g end
+            end
+            entries[#entries + 1] = { button = N.UnitFrame.ButtonOf(child) or child, group = group }
+            i = i + 1
+            child = _G[header:GetName() .. "UnitButton" .. i]
         end
-        entries[#entries + 1] = { button = N.UnitFrame.ButtonOf(child) or child, group = group }
-        i = i + 1
-        child = _G[header:GetName() .. "UnitButton" .. i]
     end
     apply(entries)
 end

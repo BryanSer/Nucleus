@@ -11,7 +11,7 @@ N.HeaderGroup = HG
 -- header itself is forbidden in combat (it is protected); moving this frame is not.
 local posFrames = {}
 function N.HeaderPosFrame(key) return posFrames[key] end
-local function placeHeader(header, key, cfg)
+local function placeHeader(header, key, cfg, group)
     local pf = posFrames[key]
     if not pf then
         pf = CreateFrame("Frame", nil, UIParent)
@@ -22,7 +22,10 @@ local function placeHeader(header, key, cfg)
     pf:ClearAllPoints()
     pf:SetPoint(cfg.point, UIParent, cfg.point, cfg.x, cfg.y)
     header:ClearAllPoints()
-    header:SetPoint(cfg.point, pf, cfg.point, 0, 0)
+    local corner, ox, oy = cfg.point, 0, 0
+    local grid = N.RaidGrid
+    if key == "raid" and grid and grid.Active() then corner, ox, oy = grid.Anchor(group or 1) end
+    header:SetPoint(corner, pf, cfg.point, ox, oy)
 end
 
 -- Blizzard's group headers are secure frames: nothing of ours is stored in their Lua tables.
@@ -203,6 +206,99 @@ local function raidGroupAllowed(group)
 end
 N.RaidGroupAllowed = raidGroupAllowed
 
+-- Raid groups on a grid ("Groups per row"): one header per group on fixed slots of one block, so nothing moves
+-- while the roster changes.
+local RG = {}
+N.RaidGrid = RG
+
+-- { primary x, primary y, secondary x, secondary y }: where the next group goes in a row, then the next row.
+local FLOWS = {
+    RIGHT_DOWN = { 1, 0, 0, -1 }, LEFT_DOWN = { -1, 0, 0, -1 },
+    RIGHT_UP = { 1, 0, 0, 1 }, LEFT_UP = { -1, 0, 0, 1 },
+    DOWN_RIGHT = { 0, -1, 1, 0 }, DOWN_LEFT = { 0, -1, -1, 0 },
+    UP_RIGHT = { 0, 1, 1, 0 }, UP_LEFT = { 0, 1, -1, 0 },
+}
+RG.FLOW_ORDER = { "RIGHT_DOWN", "LEFT_DOWN", "RIGHT_UP", "LEFT_UP", "DOWN_RIGHT", "DOWN_LEFT", "UP_RIGHT", "UP_LEFT" }
+
+-- Only with Group by = Group and without pinned names (those need one name list over every group).
+function RG.Active()
+    local cfg = N.db and N.db.raid
+    if not cfg or cfg.groupBy ~= "GROUP" then return false end
+    if (tonumber(cfg.groupsPerRow) or 0) < 1 then return false end
+    local rank, pins = sortConfig("raid")
+    return not (rank and #pins > 0)
+end
+
+-- { list = allowed groups, index = group -> slot, slots[k] = { x, y } (top left, downwards is negative), w, h of
+-- the block, gw / gh of one group }.
+function RG.Layout()
+    local cfg = N.db.raid
+    local w, h, sp = cfg.width, cfg.height, cfg.spacing
+    local list, index = {}, {}
+    for g = 1, 8 do
+        if raidGroupAllowed(g) then
+            list[#list + 1] = g
+            index[g] = #list
+        end
+    end
+    local n = #list
+    local per = math.min(8, math.max(1, math.floor(tonumber(cfg.groupsPerRow) or 1)))
+    local flow = FLOWS[cfg.groupFlow] or FLOWS.RIGHT_DOWN
+    local px, py, sx, sy = flow[1], flow[2], flow[3], flow[4]
+    local unitsAcross = cfg.orientation == "horizontal"
+    local gw = unitsAcross and (5 * w + 4 * sp) or w
+    local gh = unitsAcross and h or (5 * h + 4 * sp)
+    local gapP = cfg.columnSpacing or sp
+    local gapS = cfg.rowSpacing or gapP
+    local alongX = px ~= 0
+    local nP, nS = math.min(per, math.max(n, 1)), math.max(1, math.ceil(n / per))
+    local cols, rows = alongX and nP or nS, alongX and nS or nP
+    local gapX, gapY = alongX and gapP or gapS, alongX and gapS or gapP
+    local slots = {}
+    for k = 0, n - 1 do
+        local a, b = k % per, math.floor(k / per)
+        local xi, yi
+        if alongX then
+            xi = px > 0 and a or (cols - 1 - a)
+            yi = sy < 0 and b or (rows - 1 - b)
+        else
+            yi = py < 0 and a or (rows - 1 - a)
+            xi = sx > 0 and b or (cols - 1 - b)
+        end
+        slots[k + 1] = { x = xi * (gw + gapX), y = -yi * (gh + gapY) }
+    end
+    return {
+        list = list, index = index, slots = slots, gw = gw, gh = gh,
+        w = n > 0 and (cols * gw + (cols - 1) * gapX) or 0,
+        h = n > 0 and (rows * gh + (rows - 1) * gapY) or 0,
+    }
+end
+
+function RG.Size()
+    local l = RG.Layout()
+    return l.w, l.h
+end
+
+-- The header corner that sits on the slot corner, and its offset from the block's anchor point. The corner
+-- follows the way the units grow inside the group, so a group that is not full keeps its place.
+function RG.Anchor(group)
+    local cfg = N.db.raid
+    local l = RG.Layout()
+    local k = l.index[group]
+    local point = cfg.point or "TOPLEFT"
+    if not k then return point, 0, 0 end
+    local s = l.slots[k]
+    local horizontal = cfg.orientation == "horizontal"
+    local right = horizontal and cfg.reverse
+    local bottom = (not horizontal) and cfg.reverse
+    local corner = (bottom and "BOTTOM" or "TOP") .. (right and "RIGHT" or "LEFT")
+    local cx = s.x + (right and l.gw or 0)
+    local cy = s.y - (bottom and l.gh or 0)
+    local fx = point:find("LEFT") and 0 or point:find("RIGHT") and 1 or 0.5
+    local fy = point:find("TOP") and 0 or point:find("BOTTOM") and 1 or 0.5
+    return corner, cx - fx * l.w, cy + fy * l.h
+end
+
 -- Role order without pins needs no name list: the header sorts by assigned role. Returns the grouping order or nil.
 local function nativeRoleOrder(key)
     local rank, pins = sortConfig(key)
@@ -272,9 +368,20 @@ local SIDES = {
     TOP = { "BOTTOMLEFT", "TOPLEFT" }, BOTTOM = { "TOPLEFT", "BOTTOMLEFT" },
 }
 
+local OWNER_HEADERS = { "party", "raid", "raidG2", "raidG3", "raidG4", "raidG5", "raidG6", "raidG7", "raidG8" }
+
+-- The raid header and, with "Groups per row", the headers of groups 2-8.
+function N.RaidHeaders()
+    local out = {}
+    for _, key in ipairs(OWNER_HEADERS) do
+        if key ~= "party" and N.headers[key] then out[#out + 1] = N.headers[key] end
+    end
+    return out
+end
+
 local function findOwnerButton(ownerUnit)
     for pass = 1, 2 do
-        for _, key in ipairs({ "party", "raid" }) do
+        for _, key in ipairs(OWNER_HEADERS) do
             local h = N.headers[key]
             if h and h:IsShown() then
                 local i, child = 1, _G[h:GetName() .. "UnitButton1"]
@@ -282,8 +389,9 @@ local function findOwnerButton(ownerUnit)
                     if child:IsShown() then
                         local u = child:GetAttribute("unit")
                         if u == ownerUnit then return child end
-                        if pass == 2 and ownerUnit == "player" and u and UnitIsUnit(u, "player") then
-                            return child
+                        if pass == 2 and ownerUnit == "player" and u then
+                            local same = UnitIsUnit(u, "player")
+                            if not N.IsSecret(same) and same then return child end
                         end
                     end
                     i = i + 1
@@ -433,11 +541,34 @@ local function configurePetContainer(container)
     styleChildren(container)
 end
 
+-- The headers of raid groups 2-8 (group 1 is the raid header itself), made once out of combat when "Groups per
+-- row" is first used; each one only shows its own group.
+local builtGroup = setmetatable({}, { __mode = "k" })
+local function createGroupHeaders()
+    local main = N.headers.raid
+    local info = main and headerInfo[main]
+    if not info or InCombatLockdown() then return end
+    for g = 2, 8 do
+        local key = "raidG" .. g
+        if not N.headers[key] then
+            local header = CreateFrame("Frame", "NucleusHeaderRaidG" .. g, info.holder or UIParent, "SecureGroupHeaderTemplate")
+            headerInfo[header] = { key = "raid", holder = info.holder, group = g }
+            header:SetMovable(true)
+            header:SetClampedToScreen(true)
+            N.headers[key] = header
+        end
+    end
+    C_Timer.After(0, function() if N.ClickCasting then N.ClickCasting.ApplyToAll() end end)
+end
+local syncGroupHeaders
+
 -- Pushes the full attribute set from SavedVariables onto the header. Must run out of combat;
 -- SecureGroupHeader_Update relays it to the children.
 local function configure(header)
     local key = N.HeaderKey(header)
     local cfg = N.db[key]
+    local group = headerInfo[header] and headerInfo[header].group
+    local grid = key == "raid" and RG.Active()
     if key == "ownPet" or key == "npc" or key == "spotlight" then
         configurePetContainer(header)
         return
@@ -528,7 +659,43 @@ local function configure(header)
         end
     end
 
-    placeHeader(header, key, cfg)
+    if key == "raid" then
+        if group then
+            header:SetAttribute("showPlayer", false)
+            header:SetAttribute("showParty", false)
+            header:SetAttribute("showSolo", false)
+        end
+        if grid then
+            header:SetAttribute("nameList", nil)
+            header:SetAttribute("unitsPerColumn", 5)
+            header:SetAttribute("maxColumns", 1)
+            header:SetAttribute("sortMethod", cfg.sortMethod)
+            local g = group or 1
+            header:SetAttribute("groupFilter", raidGroupAllowed(g) and tostring(g) or "0")
+            local roleOrder = nativeRoleOrder("raid")
+            if roleOrder then
+                header:SetAttribute("groupingOrder", roleOrder)
+                header:SetAttribute("groupBy", "ASSIGNEDROLE")
+            else
+                header:SetAttribute("groupBy", nil)
+                header:SetAttribute("groupingOrder", nil)
+            end
+        elseif group then
+            header:SetAttribute("showRaid", false)
+            header:SetAttribute("groupFilter", "0")
+        end
+        if group and not InCombatLockdown() then header:SetShown(grid and true or false) end
+    end
+
+    N.Debug("configure", key, group and ("group " .. group) or "main", grid and "grid" or "single")
+    placeHeader(header, key, cfg, group)
+
+    if group and grid and not builtGroup[header] and not InCombatLockdown() then
+        builtGroup[header] = true
+        header:SetAttribute("startingIndex", -5)
+        header:Show()
+        header:SetAttribute("startingIndex", 1)
+    end
 
     applyChildSize(header)
     if SecureGroupHeader_Update then
@@ -537,6 +704,15 @@ local function configure(header)
     styleChildren(header)
     C_Timer.After(0, function() styleChildren(header) end)
     if key == "groupPets" then applyGroupPetsMode() end
+    if key == "raid" and not group then syncGroupHeaders() end
+end
+
+syncGroupHeaders = function()
+    if RG.Active() then createGroupHeaders() end
+    for g = 2, 8 do
+        local h = N.headers["raidG" .. g]
+        if h then configure(h) end
+    end
 end
 
 function HG.RefreshAttach()
@@ -655,7 +831,10 @@ end
 function HG.Init()
     for _, key in ipairs({ "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }) do
         if N.db[key].enabled then
-            createHeader(key)
+            -- A login or /reload in combat: secure headers are only made once the combat is over.
+            N.RunWhenSafe(function()
+                if not N.headers[key] then createHeader(key) end
+            end, "create-" .. key)
         end
     end
 
@@ -717,6 +896,11 @@ function HG.Init()
                     N.RunWhenSafe(function() configure(header) end, "order-" .. key)
                 end
             end
+        end
+    end)
+    rosterFrame:HookScript("OnEvent", function()
+        if N.headers.raid and RG.Active() and not N.headers.raidG2 and not InCombatLockdown() then
+            N.RunWhenSafe(function() configure(N.headers.raid) end, "raid-groups")
         end
     end)
     rosterFrame:HookScript("OnEvent", function()

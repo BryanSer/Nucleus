@@ -147,6 +147,12 @@ local function convertAppearance(a, out, report)
     local m = rgb(a.mouseoverColor)
     if m then ensure(ap, "hoverBorder").color = m end
 
+    -- { enabled, { r, g, b } }
+    if type(a.deathColor) == "table" then
+        put(ap, "deadColorEnabled", bool(a.deathColor[1]))
+        local c = rgb(a.deathColor[2])
+        if c then ap.deadColor = c end
+    end
     if a.healthFadeEnabled ~= nil then
         local g = ensure(ap, "healthFade")
         put(g, "enabled", bool(a.healthFadeEnabled))

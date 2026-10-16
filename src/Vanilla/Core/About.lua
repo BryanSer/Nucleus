@@ -17,7 +17,7 @@ N.About = {
         { name = "Supporter", color = { 0.42, 0.70, 1.00 },
           names = { "Longhorn", "Milkerson", "Kieran Smith", "Zozo", "McPeanut", "foxyface" } },
     },
-    testers = { "McPeanut", "B3Rti", "Omfgdan", "Graza", "sushibarf", "Nadjell", "vaesca", "Doc", "Bearowltree", "Danilo", "Arga" },
+    testers = { "McPeanut", "B3Rti", "Omfgdan", "Graza", "sushibarf", "Nadjell", "vaesca", "Doc", "Bearowltree", "Danilo", "Arga", "Flerbs", "foxyface", "Grem", "Tantrim" },
     links = {
         {
             label = "Discord",

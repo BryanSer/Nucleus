@@ -3,6 +3,24 @@ local N = ns.N
 
 N.Changelog = {
     {
+        version = "1.0.4",
+        date = "2026-10-16",
+        notes = {
+            "Raid groups can be laid out on a grid: Groups per row, Row spacing and Group flow give every raid group a fixed place, so for example groups 5 and 6 appear beside the first four rows (off by default).",
+            "New settings search in the options window header (or Ctrl+F): type part of a setting's name, in your language or in English, and click a result to jump to it.",
+            "Click-Casting presets: save the current bindings under a name and load or delete them later (per class, shared by all profiles). Resurrection spells now appear in the spell list as well.",
+            "New aura rows (off by default): Debuffs 2, 3 and 4, each with its own filter, position and look, and Defensives & Externals, which shows both cooldown lists in one row.",
+            "Utilities: the pull timer can show remaining or elapsed time (also with the total) and say Go! or 0 when it ends; Ready & Pull, Battle Res and Marks get a background, border, opacity and strata, and an option to show them only on mouseover.",
+            "New Death Report utility (off by default): says when a group member dies, for you only or in the group chat, optionally only during encounters and only for tanks and healers.",
+            "Health Bar Color has a Dead color for the health bar of dead or ghost units.",
+            "Bar textures and fonts that other addons register with LibSharedMedia-3.0 can be chosen under Bar texture and in General > Fonts.",
+            "New Debug console (General > Interface > Debug console, off by default): logs internal Nucleus messages into its own window.",
+            "Less CPU in groups and raids: power events are only used while a power bar or power text is shown, events for one unit within a frame are handled together, and indicators find their frames through a lookup.",
+            "Party, raid and pet frames are no longer created in the middle of combat after a login or /reload; they appear when the combat ends.",
+            "Fixed Lua errors from the raid marker indicator, the marker bar and group pings when the game hides a value (Retail, Forever).",
+        },
+    },
+    {
         version = "1.0.3",
         date = "2026-10-14",
         notes = {

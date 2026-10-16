@@ -59,6 +59,8 @@ local function groupDefaults(overrides)
             healthColorMode = "class",       -- "class" | "custom" | "gradient"
             healthCustomColor = { 0.20, 0.55, 0.95 },
             healthLossColor = { 0.065, 0.068, 0.075 },
+            deadColorEnabled = false,        -- dead / ghost units get deadColor on the health bar
+            deadColor = { 0.30, 0.30, 0.30 },
             targetBorder = { color = { 0.42, 0.70, 1.00 }, thickness = 1 },
             hoverBorder  = { color = { 1.00, 1.00, 1.00 }, thickness = 1 },
             -- Aura time text: turns `color` below `seconds`, counts in tenths below `decimals` (0 = never).
@@ -200,6 +202,28 @@ local function groupDefaults(overrides)
             },
         },
     }
+    -- Debuffs 2-4: extra debuff rows with their own filter, position and look (off by default).
+    local function extraDebuffs(filter, over)
+        local d = CopyTable(t.auras.debuffs)
+        d.enabled, d.showAll, d.max = false, false, 2
+        d.castBy, d.onlyNonPlayer = "all", false
+        for k in pairs(d.filters) do d.filters[k] = false end
+        d.filters[filter] = true
+        for k, v in pairs(over) do d[k] = v end
+        return d
+    end
+    t.auras.debuffs2 = extraDebuffs("dispellable", { point = "BOTTOMLEFT", growth = "RIGHT", x = 0, y = 22 })
+    t.auras.debuffs3 = extraDebuffs("nonplayer", { point = "CENTER", growth = "RIGHT", x = 0, y = 0, size = 24 })
+    t.auras.debuffs4 = extraDebuffs("dispeltyped", { point = "BOTTOMRIGHT", growth = "LEFT", x = 0, y = 0 })
+    -- Defensives & Externals in one row: both spell lists, and Blizzard's classification for either kind.
+    t.auras.defext = {
+        enabled = false, max = 3, size = 16, spacing = 2, perRow = 8, lineSpacing = 2,
+        point = "LEFT", growth = "RIGHT", x = 0, y = 6,
+        showStacks = false, showCooldown = true, cdStyle = "vertical", showTime = true, timeSize = 10, timeX = 0, timeY = 0,
+        stackSize = 10, stackX = 1, stackY = -1, stackPoint = "BOTTOMRIGHT", stackColor = { 1, 1, 1 },
+        timePoint = "CENTER", timeBaseColor = { 1, 1, 1 }, useFilter = false,
+        list = t.auras.defensives.list .. "," .. t.auras.externals.list,
+    }
     for k, v in pairs(overrides or {}) do
         if type(v) == "table" and type(t[k]) == "table" then
             deepMerge(t[k], v)
@@ -252,6 +276,8 @@ N.Defaults = {
     moverX = 0,
     moverY = 0,
     translitNames = false,
+    debugMode = false, -- Debug console: log internal messages
+    bindingPresets = { _list = true }, -- Click-Casting presets: [class][name] = bindings, shared by all profiles
     welcomeMessage = true, -- the "Nucleus loaded - version X" line in the chat at login / reload
     firstRunShown = false, -- the one-time welcome window has been shown
     blizzFilterOff = false, -- one-time migration: Blizzard-classification fallback switched off
@@ -301,6 +327,8 @@ N.Defaults = {
         groupFilter = { true, true, true, true, true, true, true, true },
         -- How many groups are shown at most (1-8): groups 1..maxGroups.
         maxGroups = 8,
+        -- Groups per row: 0 = the groups in one run; 1-8 puts every raid group on its own slot of a grid.
+        groupsPerRow = 0, rowSpacing = 3, groupFlow = "RIGHT_DOWN",
         -- Parts that use the Group's settings (see Profiles.lua): one switch per part.
         link = { appearance = false, indicators = false, auras = false, customIndicators = false },
         groupNames = { enabled = false, position = "above", size = 11, x = 0, y = 0, color = { 1, 1, 1 } },
@@ -343,21 +371,27 @@ N.Defaults = {
     -- Utilities: movable displays; positions are offsets from the screen centre.
     tools = {
         readyPull = {
-            enabled = true, showReady = true, showPull = true, onlyLeader = true,
+            enabled = true, fadeOut = false, backdrop = false, background = { 0.05, 0.05, 0.07 }, border = 1,
+            borderColor = { 0.20, 0.20, 0.25 }, alpha = 1, strata = "MEDIUM", showReady = true, showPull = true, onlyLeader = true,
             orientation = "horizontal", width = 64, height = 22, gap = 4,
             pullTime = 10, pullMethod = "default", -- default | dbm | bw | mrt
+            pullTimerMode = "remaining", pullFinishText = "none", -- remaining | elapsed | elapsedTotal | remainingTotal; go | zero | none
             point = "CENTER", x = 0, y = -120,
         },
         battleRes = {
-            enabled = true, iconSize = 30, showTimer = true,
+            enabled = true, fadeOut = false, backdrop = false, background = { 0.05, 0.05, 0.07 }, border = 1,
+            borderColor = { 0.20, 0.20, 0.25 }, alpha = 1, strata = "MEDIUM", iconSize = 30, showTimer = true,
             point = "CENTER", x = 0, y = -160,
         },
         marks = {
-            enabled = false, mode = "target", -- target | world | both
+            enabled = false, fadeOut = false, backdrop = false, background = { 0.05, 0.05, 0.07 }, border = 1,
+            borderColor = { 0.20, 0.20, 0.25 }, alpha = 1, strata = "MEDIUM", mode = "target", -- target | world | both
             orientation = "horizontal", size = 22, spacing = 2,
             showClear = true, onlyLeader = true,
             point = "CENTER", x = 0, y = -200,
         },
+        -- Death Report: says when a group member dies; output = "local" | "group".
+        deathReport = { enabled = false, output = "local", encounterOnly = true, leaderOnly = true, rolesOnly = false },
     },
 
     -- Click-casting: global; kind = "none" | "spell" | "item" | "macro" | "general".
@@ -421,6 +455,7 @@ do
         local g = N.Defaults[key]
         g.auras.defensives.list = C.LIST.defensives
         g.auras.externals.list = C.LIST.externals
+        g.auras.defext.list = C.LIST.defensives .. "," .. C.LIST.externals
         g.auras.offensives.list = C.LIST.offensives
         g.auras.buffs.list = C.LIST.buffs
         local mb = g.indicators.missingBuffs

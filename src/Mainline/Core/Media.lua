@@ -6,7 +6,7 @@ N.Media = M
 
 M.flat = "Interface\\Buttons\\WHITE8X8"
 
--- Bar fill textures per group type (Appearance > Color); "flat" is ours, the others are Blizzard textures.
+-- Bar fill textures: "flat" and the Nucleus ones are ours, the rest are Blizzard's.
 M.barTextures = {
     flat     = "Interface\\Buttons\\WHITE8X8",
     gradient = "Interface\\TargetingFrame\\UI-StatusBar",
@@ -27,7 +27,6 @@ M.shieldTextures = {
 M.font = "Interface\\AddOns\\Nucleus\\Media\\Fonts\\TitilliumWeb-Bold.ttf"
 M.fontDefault = M.font
 M.fontUI = M.font -- options window and dialogs
--- M.font (frame texts) and M.fontUI follow the choices in General > Fonts, see N.ApplyFontChoices.
 
 -- Choices for the two font dropdowns. `path` may be a function (resolved when used).
 M.FONTS = {
@@ -59,10 +58,41 @@ local function activeLocale()
     return l
 end
 
+-- LibSharedMedia-3.0 is optional: textures and fonts other addons register appear in the lists as "lsm:<name>".
+local function sharedLib()
+    return LibStub and LibStub("LibSharedMedia-3.0", true) or nil
+end
+
+function M.SharedName(key)
+    return type(key) == "string" and key:sub(1, 4) == "lsm:" and key:sub(5) or nil
+end
+
+local function sharedPath(kind, key)
+    local name = M.SharedName(key)
+    local lib = name and sharedLib()
+    return lib and lib:Fetch(kind, name, true) or nil
+end
+
+-- { { value = "lsm:<name>", text = name, path = file }, ... } for "statusbar" or "font"; empty without the library.
+function M.SharedList(kind)
+    local out, lib = {}, sharedLib()
+    if not lib then return out end
+    for _, name in ipairs(lib:List(kind) or {}) do
+        out[#out + 1] = { value = "lsm:" .. name, text = name, path = lib:Fetch(kind, name, true) }
+    end
+    return out
+end
+
+function M.BarTexturePath(key)
+    return sharedPath("statusbar", key) or M.barTextures[key] or (M.SharedName(key) and M.barTextures.nucleus) or M.flat
+end
+
 -- File path of a choice; falls back to the bundled font if the client can't load it.
 function M.FontPath(key)
     local special = M.LOCALE_FONTS[activeLocale()]
     if special and key ~= "game" and loadable(special) then return special end
+    local shared = sharedPath("font", key)
+    if shared and loadable(shared) then return shared end
     for _, f in ipairs(M.FONTS) do
         if f.key == key then
             local path = type(f.path) == "function" and f.path() or f.path
@@ -183,3 +213,41 @@ function N.ApplyFontChoices()
     M.font = M.FontPath(db and db.fontFrame)
 end
 N:On("NUCLEUS_DB_READY", N.ApplyFontChoices)
+
+-- Other addons may register their media after Nucleus has loaded: repaint when a chosen one turns up.
+local function usesShared()
+    local db = N.db
+    if not db then return false end
+    if M.SharedName(db.fontUI) or M.SharedName(db.fontFrame) then return true end
+    for key in pairs(N.GROUP_KEYS or {}) do
+        local g = db[key]
+        if g and g.appearance and M.SharedName(g.appearance.barTexture) then return true end
+    end
+    return false
+end
+
+local repaintQueued
+local function repaintShared()
+    if repaintQueued or not usesShared() then return end
+    repaintQueued = true
+    C_Timer.After(0.5, function()
+        repaintQueued = false
+        N.ApplyFontChoices()
+        if N.ApplyFontScale then N.ApplyFontScale() end
+        for key in pairs(N.GROUP_KEYS or {}) do
+            N:Fire("NUCLEUS_SETTING_CHANGED", key, key .. ".appearance.barTexture")
+            N:Fire("NUCLEUS_SETTING_CHANGED", key, key .. ".appearance.font")
+            N:Fire("NUCLEUS_SETTING_CHANGED", key, key .. ".auras.font")
+        end
+    end)
+end
+
+local sharedHooked
+N:On("PLAYER_LOGIN", function()
+    local lib = sharedLib()
+    if lib and lib.RegisterCallback and not sharedHooked then
+        sharedHooked = true
+        lib.RegisterCallback(M, "LibSharedMedia_Registered", repaintShared)
+    end
+    repaintShared()
+end)

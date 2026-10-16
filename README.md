@@ -20,7 +20,7 @@ For help, feel free to join the Discord server.
 
 ---
 
-**Current version:** `1.0.3`
+**Current version:** `1.0.4`
 
 </div>
 

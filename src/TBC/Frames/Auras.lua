@@ -15,11 +15,16 @@ local IsSecret, AnySecret = N.IsSecret, N.AnySecret
 local ROWS = {
     { kind = "buff",      cfg = "buffs",         filter = "HELPFUL" },
     { kind = "debuff",    cfg = "debuffs",       filter = "HARMFUL" },
+    { kind = "debuff",    cfg = "debuffs2",      filter = "HARMFUL" },
+    { kind = "debuff",    cfg = "debuffs3",      filter = "HARMFUL" },
+    { kind = "debuff",    cfg = "debuffs4",      filter = "HARMFUL" },
     { kind = "dispel",    cfg = "dispels",       filter = "HARMFUL", dispellableOnly = true },
     { kind = "defensive", cfg = "defensives",    filter = "HELPFUL", cooldown = true,
       blizz = "HELPFUL|BIG_DEFENSIVE" },
     { kind = "external",  cfg = "externals",     filter = "HELPFUL", cooldown = true,
       blizz = "HELPFUL|EXTERNAL_DEFENSIVE" },
+    { kind = "defext",    cfg = "defext",        filter = "HELPFUL", cooldown = true,
+      blizz = { "HELPFUL|BIG_DEFENSIVE", "HELPFUL|EXTERNAL_DEFENSIVE|!BIG_DEFENSIVE" } },
     { kind = "offensive", cfg = "offensives",    filter = "HELPFUL", cooldown = true },
     { kind = "crowd",     cfg = "crowdControls", filter = "HARMFUL|CROWD_CONTROL", crowd = true },
 }
@@ -280,6 +285,12 @@ local function accept(unit, d, row, cfg, excl)
         end
         -- Hidden: Blizzard's own classification, if this row has one and it is on.
         if row.blizz and cfg.useFilter == true then
+            if type(row.blizz) == "table" then
+                for _, f in ipairs(row.blizz) do
+                    if passesFilter(unit, d, f) then return true end
+                end
+                return false
+            end
             return passesFilter(unit, d, row.blizz)
         end
         return false
@@ -318,6 +329,12 @@ local MOCK_SOURCE = {
 
 local function mockCollect(mock, row, cfg, out)
     local src = mock[MOCK_SOURCE[row.kind] or "debuffs"]
+    if row.kind == "defext" then
+        src = {}
+        for _, key in ipairs({ "defensives", "externals" }) do
+            for _, d in ipairs(mock[key] or {}) do src[#src + 1] = d end
+        end
+    end
     if not src then return end
     local limit = (row.kind == "crowd" or row.kind == "offensive") and 1 or cfg.max
     for i = 1, math.min(#src, limit) do out[#out + 1] = src[i] end
@@ -855,8 +872,8 @@ function A.Layout(b)
 
     for _, row in ipairs(ROWS) do
         local cfg = N.db[b.groupKey].auras[row.cfg]
-        local pool = b._nucAuras[row.kind]
-        if not pool then pool = {}; b._nucAuras[row.kind] = pool end
+        local pool = b._nucAuras[row.cfg]
+        if not pool then pool = {}; b._nucAuras[row.cfg] = pool end
         local ax, ay = edgeSign(cfg.point)
         if cfg.point:find("BOTTOM") then ay = ay + N.PowerInset(b) end
 
@@ -885,7 +902,7 @@ function A.Update(b)
 
     for _, row in ipairs(ROWS) do
         local cfg = N.db[b.groupKey].auras[row.cfg]
-        local pool = b._nucAuras[row.kind] or {}
+        local pool = b._nucAuras[row.cfg] or {}
 
         if (b._previewOnly and b._previewOnly ~= row.cfg) or not live or not (cfg.enabled or b._previewOnly == row.cfg) then
             for _, ic in ipairs(pool) do ic:Hide() end
@@ -958,7 +975,7 @@ end
 function A.Create(b)
     if b._nucAuras then return end
     b._nucAuras = {}
-    for _, row in ipairs(ROWS) do b._nucAuras[row.kind] = {} end
+    for _, row in ipairs(ROWS) do b._nucAuras[row.cfg] = {} end
 end
 
 

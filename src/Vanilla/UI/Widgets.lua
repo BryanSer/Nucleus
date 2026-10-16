@@ -702,7 +702,7 @@ end
 local PICK_ROW, PICK_VISIBLE, PICK_MIN_W = 22, 9, 250
 local QUESTION_ICON = 134400
 
-function N.MakeIconPicker(parent, getOptions, get, set, resolve)
+function N.MakeIconPicker(parent, getOptions, get, set, resolve, plain)
     local f = CreateFrame("Frame", nil, parent)
     f._rowHeight = 24
 
@@ -740,9 +740,9 @@ function N.MakeIconPicker(parent, getOptions, get, set, resolve)
         else
             local text, tex = resolve(v)
             icon:SetTexture(tex or QUESTION_ICON)
-            icon:Show()
+            icon:SetShown(not plain)
             current:ClearAllPoints()
-            current:SetPoint("LEFT", icon, "RIGHT", 6, 0)
+            if plain then current:SetPoint("LEFT", 9, 0) else current:SetPoint("LEFT", icon, "RIGHT", 6, 0) end
             current:SetPoint("RIGHT", -20, 0)
             current:SetText(text or v)
             current:SetTextColor(unpackColor(M.color.text))
@@ -805,7 +805,12 @@ function N.MakeIconPicker(parent, getOptions, get, set, resolve)
         row.icon:SetPoint("LEFT", 6, 0)
         row.icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         row.text = N.FontString(row, 12)
-        row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+        if plain then
+            row.icon:Hide()
+            row.text:SetPoint("LEFT", 8, 0)
+        else
+            row.text:SetPoint("LEFT", row.icon, "RIGHT", 7, 0)
+        end
         row.text:SetPoint("RIGHT", -6, 0)
         row.text:SetJustifyH("LEFT")
         row.text:SetWordWrap(false)
@@ -877,6 +882,22 @@ function N.MakeIconPicker(parent, getOptions, get, set, resolve)
     setState(false, false)
     refreshCurrent()
     f.Refresh = refreshCurrent
+    return f
+end
+
+-- A labelled icon picker row, laid out like MakeDropdown.
+function N.MakeLabeledPicker(parent, label, getOptions, get, set, resolve, plain)
+    local f = CreateFrame("Frame", nil, parent)
+    f._rowHeight = 42
+    local lb = N.FontString(f, 12)
+    lb:SetPoint("TOPLEFT", 0, 0)
+    lb:SetText(label)
+    local picker = N.MakeIconPicker(f, getOptions, get, set, resolve, plain)
+    picker:ClearAllPoints()
+    picker:SetPoint("TOPLEFT", 0, -17)
+    picker:SetPoint("TOPRIGHT", 0, -17)
+    picker:SetHeight(22)
+    f.Refresh = picker.Refresh
     return f
 end
 

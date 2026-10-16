@@ -195,7 +195,7 @@ end
 -- Swaps a skinned bar's fill texture; call N.SkinBar first and re-apply SetStatusBarColor afterwards (a texture
 -- change resets the tint).
 function N.SetBarTexture(bar, key)
-    bar:SetStatusBarTexture(M.barTextures[key] or M.flat)
+    bar:SetStatusBarTexture(M.BarTexturePath(key))
     local tex = bar:GetStatusBarTexture()
     if tex then tex:SetDrawLayer("ARTWORK") end
 end

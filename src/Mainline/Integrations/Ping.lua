@@ -1,10 +1,9 @@
 local _, ns = ...
 local N = ns.N
 
--- Retail only: pulses a Nucleus frame when a groupmate pings that unit. Blizzard's ping events are protected,
--- so its ping icon (.pingIconFrame on every compact unit frame) is mirrored: hooksecurefunc on ShowPing /
--- ClearPing gives the texture kit, the icon owner's .unit picks the button. HideBlizzard skips event stripping
--- while Ping is on (a /reload applies it); the showPingsOnRaidFrames CVar must be on.
+-- Pulses a Nucleus frame when a groupmate pings that unit. Blizzard's ping events are protected, so its ping
+-- icon (.pingIconFrame) is mirrored: hooks on ShowPing / ClearPing give the texture kit and the owner's .unit picks
+-- the button. Needs the compact frames' events (HideBlizzard skips stripping while on) and showPingsOnRaidFrames.
 
 local Ping = {}
 N.Ping = Ping
@@ -77,7 +76,9 @@ local function findButtonForUnit(unit)
     if not unit or not N.UnitFrame or not UnitExists(unit) then return nil end
     local match
     N.UnitFrame.ForEachButton(function(child)
-        if not match and child.unit and UnitIsUnit(child.unit, unit) then match = child end
+        if match or not child.unit then return end
+        local same = UnitIsUnit(child.unit, unit)
+        if not N.IsSecret(same) and same then match = child end
     end)
     return match
 end

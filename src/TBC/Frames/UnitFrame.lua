@@ -58,10 +58,11 @@ end
 
 local UNIT_EVENTS = {
     "UNIT_HEALTH", "UNIT_MAXHEALTH",
-    "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
     "UNIT_NAME_UPDATE", "UNIT_CONNECTION",
     "UNIT_THREAT_SITUATION_UPDATE",
 }
+-- Power events fire for every regenerating unit: they are only registered while the power bar or its text is shown.
+local POWER_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" }
 
 
 local function snap(frame, v)
@@ -281,6 +282,19 @@ function N.PowerInset(b)
     return (o.height or 4) + (o.y or 0)
 end
 
+-- Registers or drops the power events as the power bar / power text appears and disappears.
+local function syncPowerEvents(b)
+    local unit = b.unit
+    if not unit then return end
+    local pb = N.db[b.groupKey].indicators.powerBar
+    local want = (pb.enabled and b._powerShown) and true or false
+    if b._powerEvents == want then return end
+    b._powerEvents = want
+    for _, ev in ipairs(POWER_EVENTS) do
+        if want then N.SafeRegisterUnit(b, ev, unit) else b:UnregisterEvent(ev) end
+    end
+end
+
 function UF.LayoutBars(b)
     local ind = N.db[b.groupKey].indicators
     local appearance = N.db[b.groupKey].appearance
@@ -324,6 +338,7 @@ function UF.LayoutBars(b)
     b.powerText:SetWidth(0)
     placeText(b.powerText, b.health, { position = pb.textPosition, x = pb.textX, y = pb.textY })
     b.powerText:SetShown(pOn(b, "powerBar", pb.enabled) and b._powerShown and pb.text and pShow(b, "powerBar"))
+    syncPowerEvents(b)
 
     if N.Auras then N.Auras.Layout(b) end
 end
@@ -336,6 +351,23 @@ local function desecret(v, fallback)
     if v == nil then return fallback end
     return v
 end
+
+-- Every styled button, and the buttons by the unit they show: the indicator events look them up here.
+local allButtons, byUnit = {}, {}
+local function mapUnit(b, old, new)
+    local set = old and byUnit[old]
+    if set then
+        set[b] = nil
+        if not next(set) then byUnit[old] = nil end
+    end
+    if new then
+        set = byUnit[new]
+        if not set then set = {}; byUnit[new] = set end
+        set[b] = true
+    end
+end
+function UF.AllButtons() return allButtons end
+function UF.ButtonsOfUnit(unit) return byUnit[unit] end
 
 local function readUnit(b)
     local u = b.unit
@@ -355,6 +387,10 @@ end
 -- Class color, fixed color or red-yellow-green gradient; the gradient only does arithmetic on N.HealthFraction
 -- (nil when unknown).
 local function healthColor(b, appearance)
+    if b.dead and appearance.deadColorEnabled then
+        local d = appearance.deadColor
+        if d then return d[1], d[2], d[3] end
+    end
     local mode = appearance.healthColorMode
     if mode == "custom" then
         local c = appearance.healthCustomColor
@@ -526,6 +562,18 @@ local function setPowerText(b, fs, o)
     fs:SetTextColor(powerTextRGB(b, o))
 end
 
+local function renderPower(b, ind)
+    if b.power:IsShown() then
+        b.power:SetMinMaxValues(0, b.ppMax)
+        if b.connected then b.power:SetValue(b.pp) else b.power:SetValue(0) end
+        b.power:SetStatusBarColor(powerRGB(b))
+    end
+
+    if b.powerText:IsShown() then
+        setPowerText(b, b.powerText, ind.powerBar)
+    end
+end
+
 local function render(b)
     local appearance = N.db[b.groupKey].appearance
 
@@ -563,15 +611,7 @@ local function render(b)
         b.hpText:SetTextColor(textRGB(b, ind.healthText, { 0.85, 0.85, 0.87 }))
     end
 
-    if b.power:IsShown() then
-        b.power:SetMinMaxValues(0, b.ppMax)
-        if b.connected then b.power:SetValue(b.pp) else b.power:SetValue(0) end
-        b.power:SetStatusBarColor(powerRGB(b))
-    end
-
-    if b.powerText:IsShown() then
-        setPowerText(b, b.powerText, ind.powerBar)
-    end
+    renderPower(b, ind)
 
     for i = 1, #b.targetEdges do b.targetEdges[i]:SetShown(b.isTarget and not b._previewOnly) end
 
@@ -592,6 +632,7 @@ UF.FullUpdate = fullUpdate
 
 function UF.ApplyMock(b, m)
     b._mock = m
+    mapUnit(b, b.unit, nil)
     b.unit = nil
     b.connected = m.connected ~= false
     b.dead = m.dead or false
@@ -612,13 +653,16 @@ end
 local function bindUnit(b)
     local unit = (b._secure or b):GetAttribute("unit")
     if unit == b.unit then return end
+    mapUnit(b, b.unit, unit)
     b.unit = unit
     b:UnregisterAllEvents()
+    b._powerEvents = nil
     if unit then
         for _, ev in ipairs(UNIT_EVENTS) do
             N.SafeRegisterUnit(b, ev, unit)
         end
         fullUpdate(b)
+        syncPowerEvents(b)
         -- Bar widths resolve a frame after anchoring: lay out again once they have.
         C_Timer.After(0, function()
             if b.unit == unit then
@@ -629,8 +673,46 @@ local function bindUnit(b)
     end
 end
 
-local function onEvent(b)
-    fullUpdate(b)
+-- Unit events are collected per button and handled once on the next frame; power, prediction and absorb events
+-- only repaint their own part.
+local function refreshPower(b)
+    local u = b.unit
+    b.pp, b.ppMax = UnitPower(u), UnitPowerMax(u)
+    renderPower(b, N.db[b.groupKey].indicators)
+end
+
+local FAST_EVENTS = {
+    UNIT_POWER_UPDATE = { "power", refreshPower },
+}
+local dirty, flushQueued = {}, false
+
+local function flushDirty()
+    flushQueued = false
+    for b, d in pairs(dirty) do
+        dirty[b] = nil
+        if b.unit and UnitExists(b.unit) then
+            if d.full then
+                fullUpdate(b)
+            else
+                for _, fn in pairs(d) do fn(b) end
+            end
+        end
+    end
+end
+
+local function onEvent(b, event)
+    local d = dirty[b]
+    if not d then d = {}; dirty[b] = d end
+    local fast = FAST_EVENTS[event]
+    if fast then
+        if not d.full then d[fast[1]] = fast[2] end
+    else
+        d.full = true
+    end
+    if not flushQueued then
+        flushQueued = true
+        C_Timer.After(0, flushDirty)
+    end
 end
 
 local function onUpdate(b, elapsed)
@@ -711,7 +793,7 @@ end
 local function isHeaderChild(child)
     local p = child:GetParent()
     return p ~= nil and N.headers ~= nil
-        and (p == N.headers.party or p == N.headers.raid or p == N.headers.groupPets)
+        and (p == N.headers.party or p == N.headers.raid or p == N.headers.groupPets or N.HeaderHolder(p) ~= nil)
 end
 
 function N.StyleUnitButton(name)
@@ -732,6 +814,7 @@ function N.StyleUnitButton(name)
         plainStyled[child] = true
     end
     UF.CreateVisual(b, key)
+    allButtons[#allButtons + 1] = b
 
     -- A plain Button knows only the left mouse button; without this, right / middle / extra-button click-casting and
     -- the menu never fire.

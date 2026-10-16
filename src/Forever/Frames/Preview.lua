@@ -108,6 +108,11 @@ local function freshMock(filter, stateKey)
             { icon = 135936, applications = 3, duration = 8,  expirationTime = now + 6, sourceUnit = "player" },
             { icon = 135939, applications = 3, duration = 20, expirationTime = now + 14 },
         },
+        defext = {
+            { icon = 135841, applications = 3, duration = 10, expirationTime = now + 7 },
+            { icon = 135936, applications = 3, duration = 8,  expirationTime = now + 6, sourceUnit = "player" },
+            { icon = 132362, applications = 3, duration = 8,  expirationTime = now + 5 },
+        },
         offensives = {
             { icon = 136048, applications = 3, duration = 20, expirationTime = now + 15 },
             { icon = 132316, applications = 3, duration = 12, expirationTime = now + 9 },

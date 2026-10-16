@@ -86,3 +86,45 @@ function N.Snap(frame, v)
     end
     return v
 end
+
+-- Debug log; only filled while debug logging is on.
+local LOG_MAX = 400
+N.DebugLog = {}
+local debugQueued
+
+function N.Debug(...)
+    local db = N.db
+    if not (db and db.debugMode) then return end
+    local ok, text = pcall(function(...) return strjoin(" ", tostringall(...)) end, ...)
+    local log = N.DebugLog
+    log[#log + 1] = date("%H:%M:%S") .. " " .. (ok and text or "?")
+    if #log > LOG_MAX then table.remove(log, 1) end
+    if N.OnDebugLog and not debugQueued then
+        debugQueued = true
+        C_Timer.After(0.2, function()
+            debugQueued = false
+            if N.OnDebugLog then N.OnDebugLog() end
+        end)
+    end
+end
+
+local printOut = N.Print
+function N:Print(...)
+    printOut(self, ...)
+    N.Debug("print:", ...)
+end
+
+N:On("NUCLEUS_SETTING_CHANGED", function(_, section, path) N.Debug("setting", section, path) end)
+
+local watcher = CreateFrame("Frame")
+for _, e in ipairs({ "ADDON_ACTION_BLOCKED", "ADDON_ACTION_FORBIDDEN", "PLAYER_REGEN_DISABLED",
+    "PLAYER_REGEN_ENABLED", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD" }) do
+    watcher:RegisterEvent(e)
+end
+watcher:SetScript("OnEvent", function(_, event, a, b)
+    if event == "ADDON_ACTION_BLOCKED" or event == "ADDON_ACTION_FORBIDDEN" then
+        N.Debug(event, a, b)
+    else
+        N.Debug(event)
+    end
+end)

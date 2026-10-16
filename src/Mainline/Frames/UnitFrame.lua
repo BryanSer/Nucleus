@@ -58,12 +58,13 @@ end
 
 local UNIT_EVENTS = {
     "UNIT_HEALTH", "UNIT_MAXHEALTH",
-    "UNIT_POWER_FREQUENT", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER",
     "UNIT_NAME_UPDATE", "UNIT_CONNECTION",
     "UNIT_THREAT_SITUATION_UPDATE",
     "UNIT_HEAL_PREDICTION", "UNIT_ABSORB_AMOUNT_CHANGED",
     "UNIT_HEAL_ABSORB_AMOUNT_CHANGED",
 }
+-- Power events fire for every regenerating unit: they are only registered while the power bar or its text is shown.
+local POWER_EVENTS = { "UNIT_POWER_UPDATE", "UNIT_MAXPOWER", "UNIT_DISPLAYPOWER" }
 
 
 local function snap(frame, v)
@@ -360,6 +361,19 @@ function N.PowerInset(b)
     return (o.height or 4) + (o.y or 0)
 end
 
+-- Registers or drops the power events as the power bar / power text appears and disappears.
+local function syncPowerEvents(b)
+    local unit = b.unit
+    if not unit then return end
+    local pb = N.db[b.groupKey].indicators.powerBar
+    local want = (pb.enabled and b._powerShown) and true or false
+    if b._powerEvents == want then return end
+    b._powerEvents = want
+    for _, ev in ipairs(POWER_EVENTS) do
+        if want then b:RegisterUnitEvent(ev, unit) else b:UnregisterEvent(ev) end
+    end
+end
+
 function UF.LayoutBars(b)
     local ind = N.db[b.groupKey].indicators
     local appearance = N.db[b.groupKey].appearance
@@ -408,6 +422,7 @@ function UF.LayoutBars(b)
     b.powerText:SetWidth(0)
     placeText(b.powerText, b.health, { position = pb.textPosition, x = pb.textX, y = pb.textY })
     b.powerText:SetShown(pOn(b, "powerBar", pb.enabled) and b._powerShown and pb.text and pShow(b, "powerBar"))
+    syncPowerEvents(b)
 
     -- Overlay bars need an explicit pixel width: only one edge is anchored to health's fill texture.
     local hw = b.health:GetWidth() or 0
@@ -442,6 +457,23 @@ local function desecret(v, fallback)
     if v == nil then return fallback end
     return v
 end
+
+-- Every styled button, and the buttons by the unit they show: the indicator events look them up here.
+local allButtons, byUnit = {}, {}
+local function mapUnit(b, old, new)
+    local set = old and byUnit[old]
+    if set then
+        set[b] = nil
+        if not next(set) then byUnit[old] = nil end
+    end
+    if new then
+        set = byUnit[new]
+        if not set then set = {}; byUnit[new] = set end
+        set[b] = true
+    end
+end
+function UF.AllButtons() return allButtons end
+function UF.ButtonsOfUnit(unit) return byUnit[unit] end
 
 local function readUnit(b)
     local u = b.unit
@@ -478,6 +510,10 @@ local function healthGradientCurve()
 end
 
 local function healthColor(b, appearance)
+    if b.dead and appearance.deadColorEnabled then
+        local d = appearance.deadColor
+        if d then return d[1], d[2], d[3] end
+    end
     local mode = appearance.healthColorMode
     if mode == "custom" then
         local c = appearance.healthCustomColor
@@ -663,43 +699,7 @@ local function setPowerText(b, fs, o)
     fs:SetTextColor(powerTextRGB(b, o))
 end
 
-local function render(b)
-    local appearance = N.db[b.groupKey].appearance
-
-    b.hpMax = b.hpMax or 1; b.hp = b.hp or 0
-    b.health:SetMinMaxValues(0, b.hpMax)
-    if b.connected then b.health:SetValue(b.hp) else b.health:SetValue(0) end
-    b.health:SetStatusBarColor(healthColor(b, appearance))
-
-    local ind = N.db[b.groupKey].indicators
-
-    -- The power bar's visibility is re-checked on every paint instead of waiting for the next layout pass.
-    local wantPower = pOn(b, "powerBar", ind.powerBar.enabled) and b._powerShown and pShow(b, "powerBar")
-    if (wantPower and true or false) ~= (b.power:IsShown() and true or false) then UF.LayoutBars(b) end
-
-    local statusMsg = nil
-
-    b.nameText:SetShown(pOn(b, "name", ind.name.enabled) and not statusMsg and pShow(b, "name"))
-    if pOn(b, "name", ind.name.enabled) and not statusMsg then
-        local shown = N.Translit(b.pName) or ""
-        local maxChars = ind.name.maxChars
-        if type(shown) == "string" and type(maxChars) == "number" and maxChars > 0 then
-            shown = limitChars(shown, maxChars)
-        end
-        b.nameText:SetText(shown)
-        if (not b.connected) or b.dead then
-            b.nameText:SetTextColor(M.color.textDim[1], M.color.textDim[2], M.color.textDim[3])
-        else
-            b.nameText:SetTextColor(textRGB(b, ind.name, { 0.92, 0.92, 0.94 }))
-        end
-    end
-
-    b.hpText:SetShown(pOn(b, "healthText", ind.healthText.enabled) and not statusMsg and pShow(b, "healthText"))
-    if pOn(b, "healthText", ind.healthText.enabled) and not statusMsg then
-        setHealthText(b, b.hpText, ind.healthText)
-        b.hpText:SetTextColor(textRGB(b, ind.healthText, { 0.85, 0.85, 0.87 }))
-    end
-
+local function renderPower(b, ind)
     if b.power:IsShown() then
         b.power:SetMinMaxValues(0, b.ppMax)
         if b.connected then b.power:SetValue(b.pp) else b.power:SetValue(0) end
@@ -709,7 +709,9 @@ local function render(b)
     if b.powerText:IsShown() then
         setPowerText(b, b.powerText, ind.powerBar)
     end
+end
 
+local function renderShields(b, appearance)
     if b._previewOnly or not b.connected then
         b.healPredict:Hide()
         b.absorb:Hide()
@@ -754,6 +756,48 @@ local function render(b)
         b.overAbsorb:SetShown(absorbShown and appearance.showOvershield ~= false
             and not IsSecret(overshield) and overshield == true)
     end
+end
+
+local function render(b)
+    local appearance = N.db[b.groupKey].appearance
+
+    b.hpMax = b.hpMax or 1; b.hp = b.hp or 0
+    b.health:SetMinMaxValues(0, b.hpMax)
+    if b.connected then b.health:SetValue(b.hp) else b.health:SetValue(0) end
+    b.health:SetStatusBarColor(healthColor(b, appearance))
+
+    local ind = N.db[b.groupKey].indicators
+
+    -- The power bar's visibility is re-checked on every paint instead of waiting for the next layout pass.
+    local wantPower = pOn(b, "powerBar", ind.powerBar.enabled) and b._powerShown and pShow(b, "powerBar")
+    if (wantPower and true or false) ~= (b.power:IsShown() and true or false) then UF.LayoutBars(b) end
+
+    local statusMsg = nil
+
+    b.nameText:SetShown(pOn(b, "name", ind.name.enabled) and not statusMsg and pShow(b, "name"))
+    if pOn(b, "name", ind.name.enabled) and not statusMsg then
+        local shown = N.Translit(b.pName) or ""
+        local maxChars = ind.name.maxChars
+        if type(shown) == "string" and type(maxChars) == "number" and maxChars > 0 then
+            shown = limitChars(shown, maxChars)
+        end
+        b.nameText:SetText(shown)
+        if (not b.connected) or b.dead then
+            b.nameText:SetTextColor(M.color.textDim[1], M.color.textDim[2], M.color.textDim[3])
+        else
+            b.nameText:SetTextColor(textRGB(b, ind.name, { 0.92, 0.92, 0.94 }))
+        end
+    end
+
+    b.hpText:SetShown(pOn(b, "healthText", ind.healthText.enabled) and not statusMsg and pShow(b, "healthText"))
+    if pOn(b, "healthText", ind.healthText.enabled) and not statusMsg then
+        setHealthText(b, b.hpText, ind.healthText)
+        b.hpText:SetTextColor(textRGB(b, ind.healthText, { 0.85, 0.85, 0.87 }))
+    end
+
+    renderPower(b, ind)
+
+    renderShields(b, appearance)
 
     for i = 1, #b.targetEdges do b.targetEdges[i]:SetShown(b.isTarget and not b._previewOnly) end
 
@@ -774,6 +818,7 @@ UF.FullUpdate = fullUpdate
 
 function UF.ApplyMock(b, m)
     b._mock = m
+    mapUnit(b, b.unit, nil)
     b.unit = nil
     b.connected = m.connected ~= false
     b.dead = m.dead or false
@@ -797,13 +842,16 @@ end
 local function bindUnit(b)
     local unit = (b._secure or b):GetAttribute("unit")
     if unit == b.unit then return end
+    mapUnit(b, b.unit, unit)
     b.unit = unit
     b:UnregisterAllEvents()
+    b._powerEvents = nil
     if unit then
         for _, ev in ipairs(UNIT_EVENTS) do
             b:RegisterUnitEvent(ev, unit)
         end
         fullUpdate(b)
+        syncPowerEvents(b)
         -- Bar widths resolve a frame after anchoring: run LayoutBars again once they have, or
         -- absorb/heal-predict stay at zero width.
         C_Timer.After(0, function()
@@ -816,8 +864,62 @@ local function bindUnit(b)
     if N.Auras and N.Auras.BindPrivate then N.Auras.BindPrivate(b) end
 end
 
-local function onEvent(b)
-    fullUpdate(b)
+-- Unit events are collected per button and handled once on the next frame; power, prediction and absorb events
+-- only repaint their own part.
+local function refreshPower(b)
+    local u = b.unit
+    b.pp, b.ppMax = UnitPower(u), UnitPowerMax(u)
+    renderPower(b, N.db[b.groupKey].indicators)
+end
+
+local function refreshHealPredict(b)
+    b.incHeal = UnitGetIncomingHeals and UnitGetIncomingHeals(b.unit) or 0
+    renderShields(b, N.db[b.groupKey].appearance)
+end
+
+local function refreshAbsorbs(b)
+    local u = b.unit
+    b.absorbAmt = UnitGetTotalAbsorbs and UnitGetTotalAbsorbs(u) or 0
+    b.healAbsorbAmt = UnitGetTotalHealAbsorbs and UnitGetTotalHealAbsorbs(u) or 0
+    renderShields(b, N.db[b.groupKey].appearance)
+    if N.Indicators then N.Indicators.UpdateOne(b, "shieldBar") end
+end
+
+local FAST_EVENTS = {
+    UNIT_POWER_UPDATE = { "power", refreshPower },
+    UNIT_HEAL_PREDICTION = { "heal", refreshHealPredict },
+    UNIT_ABSORB_AMOUNT_CHANGED = { "absorb", refreshAbsorbs },
+    UNIT_HEAL_ABSORB_AMOUNT_CHANGED = { "absorb", refreshAbsorbs },
+}
+local dirty, flushQueued = {}, false
+
+local function flushDirty()
+    flushQueued = false
+    for b, d in pairs(dirty) do
+        dirty[b] = nil
+        if b.unit and UnitExists(b.unit) then
+            if d.full then
+                fullUpdate(b)
+            else
+                for _, fn in pairs(d) do fn(b) end
+            end
+        end
+    end
+end
+
+local function onEvent(b, event)
+    local d = dirty[b]
+    if not d then d = {}; dirty[b] = d end
+    local fast = FAST_EVENTS[event]
+    if fast then
+        if not d.full then d[fast[1]] = fast[2] end
+    else
+        d.full = true
+    end
+    if not flushQueued then
+        flushQueued = true
+        C_Timer.After(0, flushDirty)
+    end
 end
 
 -- Alpha as a function of health: full below the threshold, the out-of-range alpha above it. The
@@ -932,7 +1034,7 @@ end
 local function isHeaderChild(child)
     local p = child:GetParent()
     return p ~= nil and N.headers ~= nil
-        and (p == N.headers.party or p == N.headers.raid or p == N.headers.groupPets)
+        and (p == N.headers.party or p == N.headers.raid or p == N.headers.groupPets or N.HeaderHolder(p) ~= nil)
 end
 
 function N.StyleUnitButton(name)
@@ -953,6 +1055,7 @@ function N.StyleUnitButton(name)
         plainStyled[child] = true
     end
     UF.CreateVisual(b, key)
+    allButtons[#allButtons + 1] = b
 
     -- A plain Button knows only the left mouse button; without this, right / middle / extra-button click-casting and
     -- the menu never fire.

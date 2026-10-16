@@ -5,8 +5,27 @@ local L = N.L
 
 local function uc(c) return c[1], c[2], c[3], c[4] or 1 end
 
--- A plain skinned button with centered text, for one-off actions (open a popup, add/remove a row)
--- that don't fit the label/control row pattern of the other widgets.
+-- Settings search: widgets note their label and page while a page is built.
+local searchIndex, indexedMode = {}, nil
+local searchCtx
+local function noteLabel(label, widget, kind)
+    if not searchCtx or type(label) ~= "string" or label == "" then return end
+    local list = searchCtx.list
+    list[#list + 1] = { label = label, widget = widget, kind = kind }
+end
+for _, spec in ipairs({ { "MakeCheckbox" }, { "MakeSlider" }, { "MakeDropdown" }, { "MakeColorPicker" },
+    { "MakeLabeledPicker" }, { "MakeCard", "section" } }) do
+    local orig = N[spec[1]]
+    if orig then
+        N[spec[1]] = function(...)
+            local w = orig(...)
+            noteLabel((select(2, ...)), w, spec[2])
+            return w
+        end
+    end
+end
+
+-- A skinned text button for one-off actions.
 local function ActionButton(parent, label, onClick)
     local b = CreateFrame("Button", nil, parent)
     b._rowHeight = 28
@@ -15,11 +34,10 @@ local function ActionButton(parent, label, onClick)
     fs:SetPoint("CENTER")
     fs:SetText(label)
     b:SetScript("OnClick", onClick)
+    noteLabel(label, b)
     return b
 end
 
--- Window chrome: header (title, version badge, close), a segmented tab strip under it, a rounded
--- left rail for tabs with sub-pages, and a bottom mode bar, all on one rounded, shadowed surface.
 local HEADER  = 42
 local TAB_H   = 32
 local BODY_TOP = HEADER + TAB_H + 12
@@ -27,8 +45,7 @@ local MODEBAR = 44
 local RAIL_W  = 200
 local WIN_W   = 700
 local WIN_H   = 660
--- Content width for the two layouts: rail tabs (left list + content) vs flow tabs (no rail, titled
--- sections stacked full width).
+-- Content width: rail tabs (list + content) vs flow tabs (sections stacked full width).
 local RAIL_CW = WIN_W - RAIL_W - 30
 local FLOW_CW = WIN_W - 32
 local CONTENT_W = FLOW_CW
@@ -44,7 +61,6 @@ local activeTab, activeSub
 local lastSubOf = {}
 local statsText, statsTicker
 
--- Panel builders. Each takes a panel frame (+ mode, for per-mode panels) and stacks cards into it.
 
 local function NewPanel(twoCol)
     local p = CreateFrame("Frame", nil, scrollChild)
@@ -147,7 +163,7 @@ local function BuildGeneralOverview(p, key)
     if not (N.PET_KEYS[key] or key == "spotlight") then p:AddCard(frames) end
 end
 
--- Addon-wide settings. They are not tied to Group / Raid / Pets: one page, whatever is being edited.
+-- Addon-wide settings, the same whatever group is edited.
 local function BuildInterface(p)
     local ui = N.MakeCard(p, L["Interface"])
     ui:AddRow(N.MakeCheckbox(ui, L["Minimap button"],
@@ -177,10 +193,10 @@ local function BuildInterface(p)
     ui:AddRow(N.MakeCheckbox(ui, L["Show welcome message"],
         function() return N.db.welcomeMessage ~= false end,
         function(v) N:Set("welcomeMessage", v) end))
+    ui:AddRow(ActionButton(ui, L["Debug console"], function() N.ShowDebugConsole() end))
     p:AddCard(ui)
 
-    -- Window scale applies at once; the highlight color is baked into textures already built, so a /reload is needed
-    -- to see it everywhere.
+    -- The highlight color is baked into built textures, so it needs a /reload to show everywhere.
     local winCard = N.MakeCard(p, L["Options Window"])
     winCard:AddRow(N.MakeSlider(winCard, L["Window Scale"], 0.7, 1.3, 0.05,
         function() return N.db.uiScale end,
@@ -215,14 +231,30 @@ local function BuildInterface(p)
         fontOpts[#fontOpts + 1] = { value = f.key, text = f.key == "game" and L["Game default"] or f.text }
     end
     local fontCard = N.MakeCard(p, L["Fonts"])
-    fontCard:AddRow(N.MakeDropdown(fontCard, L["Options window font"], fontOpts,
+    local sharedFonts = M.SharedList("font")
+    local function fontRow(label, get, set)
+        if #sharedFonts == 0 then return N.MakeDropdown(fontCard, label, fontOpts, get, set) end
+        local function options()
+            local out = {}
+            for _, o in ipairs(fontOpts) do out[#out + 1] = { value = o.value, text = o.text } end
+            for _, o in ipairs(M.SharedList("font")) do out[#out + 1] = { value = o.value, text = o.text } end
+            return out
+        end
+        return N.MakeLabeledPicker(fontCard, label, options, get, set, function(v)
+            for _, o in ipairs(options()) do
+                if o.value == v then return o.text end
+            end
+            return M.SharedName(v) or v
+        end, true)
+    end
+    fontCard:AddRow(fontRow(L["Options window font"],
         function() return N.db.fontUI or "nucleus" end,
         function(v)
             N:Set("fontUI", v)
             N.ApplyFontChoices()
             N.ApplyFontScale()
         end))
-    fontCard:AddRow(N.MakeDropdown(fontCard, L["Frame font"], fontOpts,
+    fontCard:AddRow(fontRow(L["Frame font"],
         function() return N.db.fontFrame or "nucleus" end,
         function(v)
             N:Set("fontFrame", v)
@@ -304,7 +336,6 @@ local function BuildPosition(p)
     p:AddCard(c)
 end
 
--- Which areas every profile shares and which each profile keeps for itself.
 local function BuildProfileScope(p)
     local P = N.Profiles
     local c = N.MakeCard(p, L["PROFILE_SCOPE"])
@@ -476,8 +507,7 @@ local function BuildLayout(p, key)
             function() return ord().enabled end,
             function(v) N:Set(key .. ".ordering.enabled", v); refreshDim() end))
 
-        -- Who comes after whom: three slots, each one a role; picking a role that
-        -- another slot already has swaps the two.
+        -- Three role slots; picking a role another slot has swaps the two.
         local slots = { "first", "second", "third" }
         local slotLabels = { L["Comes first"], L["Comes second"], L["Comes third"] }
         local roleOpts = {
@@ -535,8 +565,6 @@ local function BuildLayout(p, key)
             function(v) N:Set(key .. ".spacing", N.Round(v)) end))
     end
     if key == "raid" or key == "groupPets" then
-        -- The gap between the columns (the raid groups when grouped by group); "Spacing" is the one inside a
-        -- column.
         local cs = N.MakeSlider(size, L["Column spacing"], 0, 40, 1,
             function() return N.db[key].columnSpacing or N.db[key].spacing end,
             function(v) N:Set(key .. ".columnSpacing", N.Round(v)) end)
@@ -552,6 +580,27 @@ local function BuildLayout(p, key)
             function(v) N:Set(key .. ".maxColumns", N.Round(v)) end))
     end
     if key == "raid" then
+        local gpr = N.MakeSlider(size, L["Groups per row"], 0, 8, 1,
+            function() return N.db.raid.groupsPerRow or 0 end,
+            function(v) N:Set("raid.groupsPerRow", N.Round(v)) end)
+        N.SetTip(gpr, L["Groups per row"], L["GROUPROW_TIP"])
+        size:AddRow(gpr)
+        size:AddRow(N.MakeSlider(size, L["Row spacing"], 0, 40, 1,
+            function() return N.db.raid.rowSpacing or N.db.raid.columnSpacing or N.db.raid.spacing end,
+            function(v) N:Set("raid.rowSpacing", N.Round(v)) end))
+        local flowOpts = {}
+        for _, f in ipairs(N.RaidGrid.FLOW_ORDER) do
+            local first, second = f:match("^(%u+)_(%u+)$")
+            flowOpts[#flowOpts + 1] = {
+                value = f,
+                text = L[first:sub(1, 1) .. first:sub(2):lower()] .. " > " .. L[second:sub(1, 1) .. second:sub(2):lower()],
+            }
+        end
+        local flowRow = N.MakeDropdown(size, L["Group flow"], flowOpts,
+            function() return N.db.raid.groupFlow or "RIGHT_DOWN" end,
+            function(v) N:Set("raid.groupFlow", v) end)
+        N.SetTip(flowRow, L["Group flow"], L["GROUPFLOW_TIP"])
+        size:AddRow(flowRow)
         local upc = N.FontString(size, 11)
         upc:SetPoint("TOPLEFT", size, "TOPLEFT", N.CARD_PAD, size._y)
         upc:SetWidth(size:GetWidth() - 2 * N.CARD_PAD)
@@ -564,12 +613,10 @@ local function BuildLayout(p, key)
     p:AddCard(size)
 end
 
--- Where the frames sit on the screen: position, anchoring to the owner / group frames, and copying
--- the settings between Group and Raid.
 local function BuildFramePosition(p, key)
     BuildPetSwitch(p, key)
-    -- Where the group sits: an anchor point of the frames, placed at the same point of the screen
-    -- plus an offset. A middle point (Top, Center, ...) makes the group grow from the middle.
+    -- An anchor point of the frames at the same point of the screen plus an offset; a middle point grows the
+    -- group from the middle.
     do
         local pos = N.MakeCard(p, L["Frame position"])
         local POINTS = {
@@ -583,6 +630,7 @@ local function BuildFramePosition(p, key)
             return fx, fy
         end
         local function blockSize()
+            if key == "raid" and N.RaidGrid and N.RaidGrid.Active() then return N.RaidGrid.Size() end
             local w, h = 0, 0
             local header = N.headers and N.headers[key]
             if header and header:IsShown() then w, h = header:GetWidth() or 0, header:GetHeight() or 0 end
@@ -670,8 +718,7 @@ local function BuildFramePosition(p, key)
         at:AddRow(N.MakeCheckbox(at, forGroup and L["Attach to the group frames"] or L["Attach to the owner's frame"],
             function() return N.db[key].attachEnabled end,
             function(v) N:Set(key .. ".attachEnabled", v) end))
-        -- The first value runs along the axis of the chosen side (left / right = X, up / down = Y),
-        -- the second across it: the labels follow the side.
+        -- First value along the chosen side's axis, the second across it.
         local gapSlider, shiftSlider
         local function relabelAttach()
             local side = N.db[key].attachSide
@@ -760,8 +807,7 @@ local function BuildRange(p, key)
         function(v) N:Set("core.rangeUpdateInterval", v) end))
     p:AddCard(c)
 
-    -- Reuses the out-of-range opacity above as the fade amount: one dial for how faded, this only
-    -- decides when it also applies.
+    -- Uses the out-of-range opacity as the fade amount.
     local fade = N.MakeCard(p, L["Fade at Full Health"])
     fade:AddRow(N.MakeCheckbox(fade, L["Fade at Full Health"],
         function() return N.db[key].appearance.healthFade.enabled end,
@@ -776,15 +822,33 @@ local function BuildColor(p, key)
     local a = N.db[key].appearance
 
     local tex = N.MakeCard(p, L["Texture"])
-    tex:AddRow(N.MakeDropdown(tex, L["Bar texture"], {
+    local builtIn = {
         { value = "nucleus", text = "Nucleus" },
         { value = "nucleus2", text = "Nucleus 2" },
         { value = "nucleus3", text = "Nucleus Gloss" },
         { value = "flat", text = L["Flat"] },
         { value = "gradient", text = L["Gradient"] },
         { value = "modern", text = L["Modern"] },
-    }, function() return a.barTexture end,
-       function(v) N:Set(key .. ".appearance.barTexture", v) end))
+    }
+    local function textureOptions()
+        local out = {}
+        for _, o in ipairs(builtIn) do
+            out[#out + 1] = { value = o.value, text = o.text, icon = M.barTextures[o.value] }
+        end
+        for _, o in ipairs(M.SharedList("statusbar")) do
+            out[#out + 1] = { value = o.value, text = o.text, icon = o.path }
+        end
+        return out
+    end
+    tex:AddRow(N.MakeLabeledPicker(tex, L["Bar texture"], textureOptions,
+        function() return a.barTexture end,
+        function(v) N:Set(key .. ".appearance.barTexture", v) end,
+        function(v)
+            for _, o in ipairs(textureOptions()) do
+                if o.value == v then return o.text, o.icon end
+            end
+            return M.SharedName(v) or v, M.BarTexturePath(v)
+        end))
     p:AddCard(tex)
 
     local col = N.MakeCard(p, L["Health Bar Color"])
@@ -800,6 +864,12 @@ local function BuildColor(p, key)
     col:AddRow(N.MakeColorPicker(col, L["Health loss color"],
         function() return a.healthLossColor end,
         function(v) N:Set(key .. ".appearance.healthLossColor", v) end))
+    col:AddRow(N.MakeCheckbox(col, L["Dead color"],
+        function() return a.deadColorEnabled end,
+        function(v) N:Set(key .. ".appearance.deadColorEnabled", v) end))
+    col:AddRow(N.MakeColorPicker(col, L["Color"],
+        function() return a.deadColor end,
+        function(v) N:Set(key .. ".appearance.deadColor", v) end))
     p:AddCard(col)
 
     local STYLE_OPTS = {
@@ -896,7 +966,6 @@ local function BuildColor(p, key)
     p:AddCard(border)
 end
 
--- The Status Icon shows one icon at a time, so this card lists every kind large enough to recognise, each switchable.
 local function AddStatusIconKinds(card, o, pth)
     for _, kind in ipairs(N.Indicators.statusIconKinds) do
         local row = CreateFrame("Frame", nil, card)
@@ -936,8 +1005,6 @@ local TEXT_POSITION_LABELS = {
     bottomleft = "Bottom Left", bottom = "Bottom", bottomright = "Bottom Right",
 }
 
--- Health Thresholds: a list of marks (health percentage + colour); rows can be
--- added and removed, so the page rebuilds itself below the preview.
 local function BuildThresholds(p, key, meta)
     local o = N.db[key].indicators.healthThresholds
     local base = key .. ".indicators.healthThresholds"
@@ -1167,8 +1234,7 @@ local function BuildIndicator(p, key, meta)
         c:AddRow(N.MakeCheckbox(c, L["Hide in combat"],
             function() return o.hideInCombat end, function(v) N:Set(pth("hideInCombat"), v) end))
     elseif meta.private then
-        -- Blizzard draws these icons (boss mechanics addons may not read); we
-        -- only choose where the slots go and what each shows.
+        -- Blizzard draws these icons; we only choose the slots and what each shows.
         c:AddRow(N.MakeSlider(c, L["Max icons"], 1, 5, 1,
             function() return o.num end, function(v) N:Set(pth("num"), N.Round(v)) end))
         c:AddRow(N.MakeSlider(c, L["Icon size"], 8, 48, 1,
@@ -1441,9 +1507,9 @@ local function BuildIndicator(p, key, meta)
 end
 
 local AURA_TITLES = {
-    buffs = "Buffs", debuffs = "Debuffs",
+    buffs = "Buffs", debuffs = "Debuffs", debuffs2 = "Debuffs 2", debuffs3 = "Debuffs 3", debuffs4 = "Debuffs 4",
     dispels = "Dispellable Debuffs", defensives = "Defensive Cooldowns",
-    externals = "External Cooldowns", offensives = "Offensive Cooldowns",
+    externals = "External Cooldowns", offensives = "Offensive Cooldowns", defext = "Defensives & Externals",
     crowdControls = "Crowd Controls",
 }
 
@@ -1510,7 +1576,7 @@ local function BuildAuras(p, key, kind)
             function() return o.dispellableOnly ~= false end, function(v) N:Set(pth("dispellableOnly"), v) end))
         c:AddRow(N.MakeCheckbox(c, L["Show spell icons"],
             function() return o.showIcons end, function(v) N:Set(pth("showIcons"), v) end))
-    elseif kind == "debuffs" then
+    elseif kind == "debuffs" or kind == "debuffs2" or kind == "debuffs3" or kind == "debuffs4" then
         c:AddRow(N.MakeCheckbox(c, L["Dispel-type border"],
             function() return o.dispelBorder end, function(v) N:Set(pth("dispelBorder"), v) end))
         local by = N.MakeDropdown(c, L["Cast by"], {
@@ -1528,7 +1594,7 @@ local function BuildAuras(p, key, kind)
     end
     p:AddCard(c)
 
-    if kind == "debuffs" then
+    if kind == "debuffs" or kind == "debuffs2" or kind == "debuffs3" or kind == "debuffs4" then
         local fc = N.MakeCard(p, L["Filter"])
         fc:AddRow(N.MakeCheckbox(fc, L["Show all debuffs"],
             function() return o.showAll end, function(v) N:Set(pth("showAll"), v) end))
@@ -1622,8 +1688,6 @@ local function BuildAuras(p, key, kind)
         p:AddCard(cc)
     end
 
-    -- Own cards for the countdown (animation + time text) and the stack count.
-    -- Dispellable debuffs show no icons of their own by default, so no such cards.
     if kind == "dispels" then return end
     local tc = N.MakeCard(p, L["Time"])
     tc:AddRow(N.MakeCheckbox(tc, L["Show cooldown animation"],
@@ -1662,7 +1726,7 @@ local function BuildAuras(p, key, kind)
     p:AddCard(sc)
 
     -- Cooldown rows: the list decides when the game shows the spell ID, otherwise Blizzard's classification (if on).
-    if kind == "defensives" or kind == "externals" or kind == "offensives" or kind == "buffs" then
+    if kind == "defensives" or kind == "externals" or kind == "defext" or kind == "offensives" or kind == "buffs" then
         local lc = N.MakeCard(p, L["Spell list"])
         local relayout
         if kind == "buffs" then
@@ -1861,8 +1925,6 @@ local function BuildAuras(p, key, kind)
     end
 end
 
--- Actions page: global (not per party/raid). The list of spells that trigger a frame animation,
--- each with its animation and color; rebuilt in place when an entry is added or removed.
 local function BuildActions(p)
     if N.Preview and not p.previewHost then p.previewHost = N.Preview.Create(p, "actions") end
     for _, child in ipairs({ p:GetChildren() }) do
@@ -2043,11 +2105,17 @@ end
 local function BuildTools(p, kind)
     local o = N.db.tools[kind]
     local function pth(f) return "tools." .. kind .. "." .. f end
-    local titles = { readyPull = "Ready & Pull", battleRes = "Battle Res", marks = "Marks" }
+    local titles = { readyPull = "Ready & Pull", battleRes = "Battle Res", marks = "Marks", deathReport = "Death Report" }
 
     local c = N.MakeCard(p, L[titles[kind]])
     c:AddRow(N.MakeCheckbox(c, L["Enabled"],
         function() return o.enabled end, function(v) N:Set(pth("enabled"), v) end))
+    if kind ~= "deathReport" then
+        local fade = N.MakeCheckbox(c, L["Show only on mouseover"],
+            function() return o.fadeOut end, function(v) N:Set(pth("fadeOut"), v and true or false) end)
+        N.SetTip(fade, L["Show only on mouseover"], L["TOOLFADE_TIP"])
+        c:AddRow(fade)
+    end
 
     local function addHint()
         local hint = N.FontString(c, 11)
@@ -2058,6 +2126,26 @@ local function BuildTools(p, kind)
         hint:SetText(L["TOOLS_HINT"])
         hint:SetHeight(hint:GetStringHeight() + 4)
         c:SetHeight(-c._y + hint:GetHeight() + N.CARD_PAD)
+    end
+
+    local function addLook()
+        local lc = N.MakeCard(p, L["Appearance"])
+        lc:AddRow(N.MakeCheckbox(lc, L["Show background"],
+            function() return o.backdrop end, function(v) N:Set(pth("backdrop"), v and true or false) end))
+        lc:AddRow(N.MakeColorPicker(lc, L["Background color"],
+            function() return o.background end, function(v) N:Set(pth("background"), v) end))
+        lc:AddRow(N.MakeSlider(lc, L["Border width"], 0, 8, 1,
+            function() return o.border end, function(v) N:Set(pth("border"), N.Round(v)) end))
+        lc:AddRow(N.MakeColorPicker(lc, L["Border color"],
+            function() return o.borderColor end, function(v) N:Set(pth("borderColor"), v) end))
+        lc:AddRow(N.MakeSlider(lc, L["Opacity"], 0.1, 1, 0.05,
+            function() return o.alpha end, function(v) N:Set(pth("alpha"), v) end))
+        lc:AddRow(N.MakeDropdown(lc, L["Strata"], {
+            { value = "BACKGROUND", text = "BACKGROUND" }, { value = "LOW", text = "LOW" },
+            { value = "MEDIUM", text = "MEDIUM" }, { value = "HIGH", text = "HIGH" },
+            { value = "DIALOG", text = "DIALOG" },
+        }, function() return o.strata end, function(v) N:Set(pth("strata"), v) end))
+        p:AddCard(lc)
     end
 
     local orient = {
@@ -2091,6 +2179,17 @@ local function BuildTools(p, kind)
             { value = "bw", text = "BigWigs" },
             { value = "mrt", text = "MRT" },
         }, function() return o.pullMethod end, function(v) N:Set(pth("pullMethod"), v) end))
+        pc:AddRow(N.MakeDropdown(pc, L["Timer value"], {
+            { value = "remaining", text = L["Remaining"] },
+            { value = "elapsed", text = L["Elapsed"] },
+            { value = "elapsedTotal", text = L["Elapsed / total"] },
+            { value = "remainingTotal", text = L["Remaining / total"] },
+        }, function() return o.pullTimerMode or "remaining" end, function(v) N:Set(pth("pullTimerMode"), v) end))
+        pc:AddRow(N.MakeDropdown(pc, L["On completion"], {
+            { value = "none", text = L["None"] },
+            { value = "go", text = L["Go!"] },
+            { value = "zero", text = L["Show zero"] },
+        }, function() return o.pullFinishText or "none" end, function(v) N:Set(pth("pullFinishText"), v) end))
         p:AddCard(pc)
     elseif kind == "battleRes" then
         c:AddRow(N.MakeSlider(c, L["Icon size"], 16, 64, 1,
@@ -2098,6 +2197,26 @@ local function BuildTools(p, kind)
         c:AddRow(N.MakeCheckbox(c, L["Show recharge timer"],
             function() return o.showTimer end, function(v) N:Set(pth("showTimer"), v) end))
         addHint()
+        p:AddCard(c)
+    elseif kind == "deathReport" then
+        c:AddRow(N.MakeDropdown(c, L["Output"], {
+            { value = "local", text = L["Only me"] },
+            { value = "group", text = L["Group chat"] },
+        }, function() return o.output end, function(v) N:Set(pth("output"), v) end))
+        c:AddRow(N.MakeCheckbox(c, L["Only during encounters"],
+            function() return o.encounterOnly end, function(v) N:Set(pth("encounterOnly"), v) end))
+        c:AddRow(N.MakeCheckbox(c, L["Only tanks and healers"],
+            function() return o.rolesOnly end, function(v) N:Set(pth("rolesOnly"), v) end))
+        c:AddRow(N.MakeCheckbox(c, L["Only for leader / assistants"],
+            function() return o.leaderOnly end, function(v) N:Set(pth("leaderOnly"), v) end))
+        local hint = N.FontString(c, 11)
+        hint:SetPoint("TOPLEFT", c, "TOPLEFT", N.CARD_PAD, c._y)
+        hint:SetWidth(c:GetWidth() - 2 * N.CARD_PAD)
+        hint:SetJustifyH("LEFT")
+        hint:SetTextColor(uc(M.color.textDim))
+        hint:SetText(L["DEATHREPORT_HINT"])
+        hint:SetHeight(hint:GetStringHeight() + 4)
+        c:SetHeight(-c._y + hint:GetHeight() + N.CARD_PAD)
         p:AddCard(c)
     else
         c:AddRow(N.MakeDropdown(c, L["Markers"], {
@@ -2119,10 +2238,9 @@ local function BuildTools(p, kind)
         p:AddCard(c)
     end
 
+    if kind ~= "deathReport" then addLook() end
 end
 
--- Custom indicators: one options page per entry (Indicators > the entry in the
--- rail), plus the "+" in the rail that creates one. See Frames/CustomIndicators.lua.
 local CUSTOM_ANCHORS = {
     { value = "BOTTOMLEFT", text = "Bottom left" }, { value = "BOTTOMRIGHT", text = "Bottom right" },
     { value = "TOPLEFT", text = "Top left" }, { value = "TOPRIGHT", text = "Top right" },
@@ -2535,14 +2653,24 @@ local PLAIN_KINDS = { target = true, focus = true, menu = true, assist = true }
 
 local QUESTION_ICON = 134400
 
--- Pickers' data, rebuilt every time a list opens (current spellbook, macros, bags). pcall-guarded: a failure gives
--- an empty list instead of an error in the options window.
+-- Picker data, rebuilt each time a list opens; pcall-guarded so a failure gives an empty list.
 
 -- Dispels hit hostile targets as well and are not "helpful" to the game, but belong in the list.
 local DISPEL_SPELLS = {
     [527] = true, [528] = true, [988] = true, [32375] = true, [552] = true, [2870] = true,
     [4987] = true, [88423] = true, [77130] = true, [115450] = true, [51886] = true,
     [475] = true, [2782] = true, [1152] = true, [8946] = true, [526] = true,
+}
+
+-- Resurrections are often not "helpful" to the game either; all ranks on Classic clients.
+local RES_SPELLS = {
+    [2006] = true, [2010] = true, [10880] = true, [10881] = true, [20770] = true, [25435] = true,
+    [7328] = true, [10322] = true, [10324] = true, [20772] = true, [20773] = true, [48949] = true, [391054] = true,
+    [2008] = true, [20609] = true, [20610] = true, [20776] = true, [20777] = true, [25590] = true,
+    [50769] = true, [50768] = true, [50767] = true, [50766] = true, [50765] = true, [50764] = true, [50763] = true,
+    [20484] = true, [20739] = true, [20742] = true, [20747] = true, [20748] = true, [26994] = true,
+    [115178] = true, [61999] = true, [361227] = true,
+    [20707] = true, [20762] = true, [20763] = true, [20764] = true, [20765] = true, [27239] = true,
 }
 
 local function getSpellOptions()
@@ -2564,7 +2692,7 @@ local function getSpellOptions()
                         local ok = true
                         if helpful and item.spellID then
                             local okCall, isHelpful = pcall(helpful, item.spellID)
-                            if okCall and isHelpful == false and not DISPEL_SPELLS[item.spellID] then ok = false end
+                            if okCall and isHelpful == false and not DISPEL_SPELLS[item.spellID] and not RES_SPELLS[item.spellID] then ok = false end
                         end
                         if ok then
                             seen[item.name] = true
@@ -2596,8 +2724,7 @@ local function getMacroOptions()
     return out
 end
 
--- Equipped items that can be used, picked by slot so the binding follows the slot when the item
--- is swapped (value "slot:13"). The label is the client's own slot name.
+-- Usable equipped items, picked by slot (value "slot:13") so the binding follows swaps.
 local EQUIP_SLOTS = {
     { slot = 13, global = "INVTYPE_TRINKET", number = 1 },
     { slot = 14, global = "INVTYPE_TRINKET", number = 2 },
@@ -2674,8 +2801,7 @@ local function getItemOptions()
     return out
 end
 
--- Text + icon for a SAVED value, whether or not it is in the open list (the
--- spell may be off-spec now, the item sold, the macro deleted).
+-- Text and icon for a saved value that may not be in the open list (off-spec spell, sold item, deleted macro).
 local function resolveSpell(value)
     local icon = C_Spell and C_Spell.GetSpellTexture and C_Spell.GetSpellTexture(value)
     return value, icon
@@ -2720,8 +2846,7 @@ local function fireClickCastingChanged()
     N:Fire("NUCLEUS_SETTING_CHANGED", "clickCasting", "clickCasting.bindings")
 end
 
--- Click-Casting tab, rebuilt in place. One binding = one row: [key combo] [kind] [value + icon] [x]; the key combo
--- is a capture button (hold modifiers, click a mouse button).
+-- Click-Casting tab, rebuilt in place: one row per binding.
 
 local CC_KEY_W, CC_KIND_W, CC_DEL_W, CC_GAP = 150, 84, 24, 6
 
@@ -2822,6 +2947,8 @@ local function PlayerSpecs()
 end
 
 local ccScope = "class"
+local ccPreset = ""
+local ccPresetsOpen = false
 
 local function BuildClickCasting(p)
     for _, child in ipairs({ p:GetChildren() }) do
@@ -2882,6 +3009,70 @@ local function BuildClickCasting(p)
         p:AddCard(note)
         return
     end
+
+    local store = N.db.bindingPresets
+    if type(store) ~= "table" then
+        store = { _list = true }
+        N.db.bindingPresets = store
+    end
+    local mine = store[class]
+    if type(mine) ~= "table" then
+        mine = {}
+        store[class] = mine
+    end
+    local presetNames = {}
+    for name in pairs(mine) do presetNames[#presetNames + 1] = name end
+    table.sort(presetNames)
+    local presetOpts = {}
+    for _, name in ipairs(presetNames) do presetOpts[#presetOpts + 1] = { value = name, text = name } end
+    if #presetOpts == 0 then presetOpts[1] = { value = "", text = L["None"] } end
+    if not mine[ccPreset] then ccPreset = presetNames[1] or "" end
+
+    -- Folds on a click on the header; closed to begin with.
+    local pre = N.MakeCard(p, L["Presets"])
+    local fold = CreateFrame("Button", nil, pre)
+    fold:SetPoint("TOPLEFT", pre, "TOPLEFT", 0, 0)
+    fold:SetPoint("TOPRIGHT", pre, "TOPRIGHT", 0, 0)
+    fold:SetHeight(28)
+    local mark = N.FontString(pre, 14)
+    mark:SetPoint("RIGHT", pre, "TOPRIGHT", -14, -14)
+    mark:SetTextColor(uc(M.color.textDim))
+    mark:SetText(ccPresetsOpen and "-" or "+")
+    fold:SetScript("OnClick", function()
+        ccPresetsOpen = not ccPresetsOpen
+        rebuild()
+    end)
+    if ccPresetsOpen then
+    pre:AddRow(N.MakeDropdown(pre, L["Preset"], presetOpts,
+        function() return ccPreset end, function(v) ccPreset = v end))
+    pre:AddRow(ActionButton(pre, L["Save as preset..."], function()
+        N.Dialog.Prompt(L["PRESET_NAME"], ccPreset, function(name)
+            name = strtrim(name or "")
+            if name == "" then return end
+            mine[name] = N.DeepCopy(bindings)
+            ccPreset = name
+            rebuild()
+        end)
+    end))
+    pre:AddRow(ActionButton(pre, L["Load preset"], function()
+        local preset = mine[ccPreset]
+        if not preset then return end
+        N.Dialog.Confirm(L["PRESET_LOAD_CONFIRM"]:format(ccPreset), function()
+            for i = #bindings, 1, -1 do bindings[i] = nil end
+            for i, entry in ipairs(N.DeepCopy(preset)) do bindings[i] = entry end
+            fireClickCastingChanged()
+            rebuild()
+        end)
+    end))
+    pre:AddRow(ActionButton(pre, L["Delete preset"], function()
+        if not mine[ccPreset] then return end
+        N.Dialog.Confirm(L["PRESET_DELETE_CONFIRM"]:format(ccPreset), function()
+            mine[ccPreset] = nil
+            rebuild()
+        end)
+    end))
+    end
+    p:AddCard(pre)
 
     local list = N.MakeCard(p, L["Bindings"])
     local head = CreateFrame("Frame", nil, list)
@@ -2991,8 +3182,6 @@ local function BuildStub(p, name)
     p:AddCard(c)
 end
 
--- Spotlight page: global (not per party/raid) - which units the Spotlight frames show.
--- Looks and layout of those frames are edited with the "Spotlight" mode switch below.
 local SP_TEXT = { target = "SP_target", targettarget = "SP_targettarget", focus = "SP_focus" }
 local function SpotlightText(e)
     if e.type == "role" then return L[e.value == "HEALER" and "SP_healers" or "SP_tanks"] end
@@ -3126,7 +3315,7 @@ local function BuildTabModel()
             enabledCheck = function() return N.db[N:Mode()].indicators[meta.name].enabled end,
         }
     end
-    for _, kind in ipairs({ "buffs", "debuffs", "dispels", "defensives", "externals", "offensives", "crowdControls" }) do
+    for _, kind in ipairs({ "buffs", "debuffs", "debuffs2", "debuffs3", "debuffs4", "dispels", "defensives", "externals", "defext", "offensives", "crowdControls" }) do
         indicatorSubs[#indicatorSubs + 1] = {
             id = kind, label = L[AURA_TITLES[kind]], perMode = true,
             build = function(p, mode) BuildAuras(p, mode, kind) end,
@@ -3193,6 +3382,8 @@ local function BuildTabModel()
               enabledCheck = function() return N.db.tools.battleRes.enabled end },
             { id = "marks", label = L["Marks"], build = function(p) BuildTools(p, "marks") end,
               enabledCheck = function() return N.db.tools.marks.enabled end },
+            { id = "deathReport", label = L["Death Report"], build = function(p) BuildTools(p, "deathReport") end,
+              enabledCheck = function() return N.db.tools.deathReport.enabled end },
         } },
         { id = "profile", label = L["Profile"], flow = "single", subs = {
             { id = "profile", label = L["Profile"], build = function(p) N.BuildProfilePanel(p) end },
@@ -3239,6 +3430,7 @@ local function SyncCustomSubs()
             panel:Hide()
             panel:SetParent(nil)
             panelCache[key] = nil
+            searchIndex[key] = nil
         end
     end
 end
@@ -3252,7 +3444,12 @@ local function GetPanel(tabId, sub)
     local p = panelCache[key]
     if not p then
         p = NewPanel()
-        sub.build(p, N:Mode())
+        local ctx = { key = key, tab = tabId, sub = sub.id, mode = sub.perMode and N:Mode() or nil, list = {} }
+        searchIndex[key] = ctx
+        searchCtx = ctx
+        local ok, err = pcall(sub.build, p, N:Mode())
+        searchCtx = nil
+        if not ok then error(err, 0) end
         panelCache[key] = p
     end
     return p
@@ -3265,7 +3462,14 @@ local function GetFlowPanel(tab)
     local p = panelCache[key]
     if not p then
         p = NewPanel(tab.flow == true)
-        for _, s in ipairs(tab.subs) do s.build(p, N:Mode()) end
+        for _, s in ipairs(tab.subs) do
+            local ctx = { key = key .. "#" .. s.id, tab = tab.id, sub = s.id, mode = s.perMode and N:Mode() or nil, list = {} }
+            searchIndex[ctx.key] = ctx
+            searchCtx = ctx
+            local ok, err = pcall(s.build, p, N:Mode())
+            searchCtx = nil
+            if not ok then error(err, 0) end
+        end
         panelCache[key] = p
     end
     return p
@@ -3317,8 +3521,7 @@ local function SelectSub(tabId, subId)
     if scroll.SetOffset then scroll.SetOffset(0) end
 end
 
--- Rail item: transparent at rest, soft wash on hover, accent pill while active. Shapes of the small type glyphs:
--- lists of {x, y, w, h, alpha} on a 16x16 grid (y counted from the top).
+-- Small type glyphs: lists of {x, y, w, h, alpha} on a 16x16 grid (y from the top).
 local GLYPHS = {
     icon    = { {1,1,14,2}, {1,13,14,2}, {1,3,2,10}, {13,3,2,10}, {5,5,6,6} },
     icons   = { {0,4,4,8}, {6,4,4,8}, {12,4,4,8} },
@@ -3542,6 +3745,10 @@ N:On("NUCLEUS_PROFILE_CHANGED", function()
             panelCache[key] = nil
         end
     end
+    for key in pairs(searchIndex) do
+        if not key:find("^profile/") then searchIndex[key] = nil end
+    end
+    indexedMode = nil
     if window and window:IsShown() and activeTab then SelectTab(activeTab) end
 end)
 
@@ -3559,7 +3766,6 @@ end
 N.RefreshMode = RefreshMode
 
 
--- Segmented tab: rounded pill, accent while selected; holding a tab drags the window, a click selects it.
 local function MakeTabButton(parent)
     local b = CreateFrame("Button", nil, parent)
     b:RegisterForDrag("LeftButton")
@@ -3750,7 +3956,7 @@ local function BuildModeBar()
     N:On("NUCLEUS_TEST_MODE", syncTest)
 end
 
--- Resource read-out (bottom right): CPU per frame, its share of the frame budget and memory (C_AddOnProfiler).
+-- Resource read-out: CPU per frame, share of the frame budget and memory.
 
 local Prof      = _G.C_AddOnProfiler
 local CPU_METRIC = Enum and Enum.AddOnProfilerMetric and Enum.AddOnProfilerMetric.RecentAverageTime
@@ -3823,6 +4029,297 @@ local function BuildHeader(win, titleText)
     return header, title, close
 end
 
+
+local FOLD = {
+    ["ä"] = "a", ["ö"] = "o", ["ü"] = "u", ["ß"] = "ss", ["á"] = "a", ["à"] = "a", ["â"] = "a", ["ã"] = "a",
+    ["å"] = "a", ["é"] = "e", ["è"] = "e", ["ê"] = "e", ["ë"] = "e", ["í"] = "i", ["ì"] = "i", ["î"] = "i",
+    ["ï"] = "i", ["ó"] = "o", ["ò"] = "o", ["ô"] = "o", ["õ"] = "o", ["ú"] = "u", ["ù"] = "u", ["û"] = "u",
+    ["ñ"] = "n", ["ç"] = "c", ["ý"] = "y", ["Ä"] = "a", ["Ö"] = "o", ["Ü"] = "u", ["É"] = "e", ["Á"] = "a",
+}
+-- Lower case without accents; text in other scripts is compared as it is.
+local function foldText(s)
+    s = s:lower()
+    return (s:gsub("[\195][\128-\191]", function(c) return FOLD[c] or c end))
+end
+
+local function pathOf(tabId, subId)
+    local tab = FindTab(tabId)
+    if not tab then return "" end
+    local text = tab.label
+    for _, s in ipairs(tab.subs) do
+        if s.id == subId and s.label ~= tab.label then text = text .. " > " .. s.label break end
+    end
+    return text
+end
+
+local function entryMatches(e, words)
+    local hay = e.hay
+    if not hay then
+        hay = foldText(e.label)
+        local en = N.EnglishOf and N.EnglishOf(e.label)
+        if en and en ~= e.label then hay = hay .. "\n" .. foldText(en) end
+        e.hay = hay
+    end
+    for _, w in ipairs(words) do
+        if not hay:find(w, 1, true) then return false end
+    end
+    return true
+end
+
+local function searchResults(text)
+    local words = {}
+    for w in foldText(text):gmatch("%S+") do words[#words + 1] = w end
+    if #words == 0 then return {} end
+    local out, seen, mode = {}, {}, N:Mode()
+    for _, ctx in pairs(searchIndex) do
+        if not ctx.mode or ctx.mode == mode then
+            for _, e in ipairs(ctx.list) do
+                if entryMatches(e, words) then
+                    local id = ctx.tab .. "|" .. tostring(ctx.sub) .. "|" .. e.label
+                    if not seen[id] then
+                        seen[id] = true
+                        out[#out + 1] = { e = e, ctx = ctx, prefix = e.hay:sub(1, #words[1]) == words[1] }
+                    end
+                end
+            end
+        end
+    end
+    table.sort(out, function(a, b)
+        if a.prefix ~= b.prefix then return a.prefix end
+        if a.e.label ~= b.e.label then return a.e.label < b.e.label end
+        return a.ctx.key < b.ctx.key
+    end)
+    return out
+end
+
+-- Builds every page once for the mode being edited, one per frame, so the index is complete.
+local indexJobs, indexing, refreshResults
+
+local function runJob(job)
+    local tab = job.tab
+    local railed = not tab.flow
+    local oldW, oldC = N.CONTENT_WIDTH, CONTENT_W
+    N.CONTENT_WIDTH = railed and RAIL_CW or FLOW_CW
+    CONTENT_W = N.CONTENT_WIDTH
+    pcall(function()
+        if job.sub then GetPanel(tab.id, job.sub) else GetFlowPanel(tab) end
+    end)
+    N.CONTENT_WIDTH, CONTENT_W = oldW, oldC
+end
+
+local function startIndex()
+    local mode = N:Mode()
+    if not indexing and indexedMode == mode then return end
+    indexedMode = mode
+    indexJobs = {}
+    SyncCustomSubs()
+    for _, tab in ipairs(TABS) do
+        if tab.id ~= "about" then
+            if tab.flow then
+                indexJobs[#indexJobs + 1] = { tab = tab }
+            else
+                for _, sub in ipairs(tab.subs) do
+                    if not sub.action then indexJobs[#indexJobs + 1] = { tab = tab, sub = sub } end
+                end
+            end
+        end
+    end
+    if indexing then return end
+    indexing = true
+    local function pump()
+        local job = table.remove(indexJobs, 1)
+        if not job then
+            indexing = false
+            if refreshResults then refreshResults() end
+            return
+        end
+        runJob(job)
+        if refreshResults then refreshResults() end
+        C_Timer.After(0, pump)
+    end
+    pump()
+end
+
+local flash
+local function flashWidget(w)
+    if not (w and w.GetTop and scrollChild) then return end
+    if not flash then
+        flash = CreateFrame("Frame", nil, scrollChild)
+        flash:SetFrameLevel(scrollChild:GetFrameLevel() + 40)
+        flash.tex = flash:CreateTexture(nil, "OVERLAY")
+        flash.tex:SetAllPoints()
+        flash:Hide()
+        flash:SetScript("OnUpdate", function(self, dt)
+            self.t = self.t + dt
+            local a = 0.45 * (1 - self.t / 1.6)
+            if a <= 0 then self:Hide() return end
+            self.tex:SetColorTexture(M.color.accent[1], M.color.accent[2], M.color.accent[3], a)
+        end)
+    end
+    flash:SetParent(scrollChild)
+    flash:ClearAllPoints()
+    flash:SetPoint("TOPLEFT", w, "TOPLEFT", -4, 3)
+    flash:SetPoint("BOTTOMRIGHT", w, "BOTTOMRIGHT", 4, -3)
+    flash.t = 0
+    flash:Show()
+end
+
+local function scrollToWidget(w)
+    local top, base = w and w.GetTop and w:GetTop(), scrollChild:GetTop()
+    if not (top and base) then return end
+    local limit = math.max(0, scrollChild:GetHeight() - scroll:GetHeight())
+    if scroll.SetOffset then scroll.SetOffset(math.min(limit, math.max(0, base - top - 24))) end
+end
+
+local function goToResult(item)
+    local ctx, e = item.ctx, item.e
+    local tab = FindTab(ctx.tab)
+    if not tab then return end
+    if not tab.flow and ctx.sub then lastSubOf[ctx.tab] = ctx.sub end
+    SelectTab(ctx.tab)
+    -- the page may have been rebuilt meanwhile: find the widget again by its label
+    local target = e.widget
+    local fresh = searchIndex[ctx.key]
+    if fresh then
+        for _, x in ipairs(fresh.list) do
+            if x.label == e.label and x.kind == e.kind then target = x.widget break end
+        end
+    end
+    C_Timer.After(0.05, function()
+        scrollToWidget(target)
+        flashWidget(target)
+    end)
+end
+
+local SEARCH_ROWS, SEARCH_ROW_H, SEARCH_W = 12, 22, 400
+
+local function BuildSearch(header)
+    local box = CreateFrame("EditBox", nil, header)
+    box:SetSize(200, 22)
+    box:SetPoint("RIGHT", header, "RIGHT", -46, 0)
+    box:SetAutoFocus(false)
+    box:SetFont(M.fontUI, 12, "")
+    N.RegisterFont(box, 12, "")
+    box:SetTextInsets(8, 8, 0, 0)
+    box:SetTextColor(uc(M.color.text))
+    N.SkinRound(box, M.color.base, M.color.line, true)
+    local ph = N.FontString(box, 12)
+    ph:SetPoint("LEFT", 8, 0)
+    ph:SetTextColor(uc(M.color.textDim))
+    ph:SetText(L["Search..."])
+
+    local list = CreateFrame("Frame", nil, window)
+    list:SetFrameStrata("FULLSCREEN_DIALOG")
+    list:SetWidth(SEARCH_W)
+    list:SetPoint("TOPRIGHT", box, "BOTTOMRIGHT", 0, -3)
+    N.SkinRound(list, { 0.095, 0.103, 0.125, 1 }, M.color.line, true)
+    N.AddShadow(list, 14, 0.5, -3)
+    list:Hide()
+
+    local status = N.FontString(list, 12)
+    status:SetPoint("TOPLEFT", 10, -8)
+    status:SetTextColor(uc(M.color.textDim))
+
+    local rows = {}
+    local function row(i)
+        local r = rows[i]
+        if r then return r end
+        r = CreateFrame("Button", nil, list)
+        r:SetHeight(SEARCH_ROW_H)
+        r:SetPoint("TOPLEFT", 4, -4 - (i - 1) * SEARCH_ROW_H)
+        r:SetPoint("TOPRIGHT", -4, -4 - (i - 1) * SEARCH_ROW_H)
+        r:RegisterForClicks("LeftButtonDown")
+        local hl = r:CreateTexture(nil, "HIGHLIGHT")
+        hl:SetColorTexture(uc(M.color.accent))
+        hl:SetAlpha(0.35)
+        hl:SetAllPoints()
+        r.path = N.FontString(r, 11)
+        r.path:SetPoint("RIGHT", -6, 0)
+        r.path:SetTextColor(uc(M.color.textDim))
+        r.path:SetJustifyH("RIGHT")
+        r.path:SetWidth(170)
+        r.path:SetWordWrap(false)
+        r.text = N.FontString(r, 12)
+        r.text:SetPoint("LEFT", 8, 0)
+        r.text:SetPoint("RIGHT", r.path, "LEFT", -8, 0)
+        r.text:SetJustifyH("LEFT")
+        r.text:SetWordWrap(false)
+        r:SetScript("OnClick", function(self)
+            if self.item then goToResult(self.item) end
+            box:ClearFocus()
+            list:Hide()
+        end)
+        rows[i] = r
+        return r
+    end
+
+    local current = {}
+    refreshResults = function()
+        local text = box:GetText()
+        if text == "" then list:Hide() return end
+        current = searchResults(text)
+        local n = math.min(#current, SEARCH_ROWS)
+        for i = 1, #rows do rows[i]:Hide() end
+        for i = 1, n do
+            local r = row(i)
+            local item = current[i]
+            r.item = item
+            r.text:SetText(item.e.label)
+            r.path:SetText(pathOf(item.ctx.tab, item.ctx.sub))
+            r:Show()
+        end
+        if n == 0 then
+            status:SetText(indexing and L["Indexing settings..."] or L["Nothing found"])
+            status:Show()
+        else
+            status:Hide()
+        end
+        list:SetHeight(8 + math.max(1, n) * SEARCH_ROW_H + (n == 0 and 10 or 0))
+        list:Show()
+    end
+
+    box:SetScript("OnTextChanged", function(self)
+        ph:SetShown(self:GetText() == "")
+        if self:GetText() ~= "" then startIndex() end
+        refreshResults()
+    end)
+    box:SetScript("OnEditFocusGained", function()
+        N.SetPanelBorder(box, M.color.accent)
+        if box:GetText() ~= "" then startIndex(); refreshResults() end
+    end)
+    box:SetScript("OnEditFocusLost", function()
+        N.SetPanelBorder(box, M.color.line)
+        C_Timer.After(0.2, function()
+            if not list:IsMouseOver() and not box:HasFocus() then list:Hide() end
+        end)
+    end)
+    box:SetScript("OnEscapePressed", function(self)
+        self:SetText("")
+        self:ClearFocus()
+        list:Hide()
+    end)
+    box:SetScript("OnEnterPressed", function(self)
+        if current[1] then goToResult(current[1]) end
+        self:ClearFocus()
+        list:Hide()
+    end)
+
+    window:HookScript("OnHide", function()
+        list:Hide()
+        box:ClearFocus()
+    end)
+    window:EnableKeyboard(true)
+    window:SetPropagateKeyboardInput(true)
+    window:SetScript("OnKeyDown", function(self, key)
+        if key == "F" and IsControlKeyDown() then
+            self:SetPropagateKeyboardInput(false)
+            box:SetFocus()
+        else
+            self:SetPropagateKeyboardInput(true)
+        end
+    end)
+end
+
 local function BuildWindow()
     window = CreateFrame("Frame", "NucleusOptionsFrame", UIParent)
     window._nucUI = true
@@ -3868,6 +4365,7 @@ local function BuildWindow()
     modeLabel:SetPoint("LEFT", badge, "RIGHT", 8, 0)
     modeLabel:SetTextColor(uc(M.color.accentBright))
     N.OnRecolor(function() modeLabel:SetTextColor(uc(M.color.accentBright)) end)
+    BuildSearch(header)
 
     N.Hairline(window, "hb", MODEBAR, M.color.line, 12, 12)
 
@@ -3897,8 +4395,6 @@ end
 
 local POPUP_W = 340
 
--- Shared chrome of the small standalone popups: draggable header, a close button above the header's level, and a
--- scroll area that stacks cards.
 local function BuildPopupShell(frameName, titleText, width, height)
     local win = CreateFrame("Frame", frameName, UIParent)
     win._nucUI = true
@@ -4060,6 +4556,84 @@ function N.ShowPreviewSettingsPopup()
     previewSettingsPopup:SetShown(not previewSettingsPopup:IsShown())
 end
 
+local debugConsole
+
+local function BuildDebugConsole()
+    local W, H = 460, 470
+    local win, child = BuildPopupShell("NucleusDebugConsole", L["Debug console"], W, H)
+    child:GetParent():Hide()
+
+    local enable = N.MakeCheckbox(win, L["Enable debug logging"],
+        function() return N.db.debugMode end,
+        function(v) N:Set("debugMode", v and true or false) end)
+    enable:SetPoint("TOPLEFT", win, "TOPLEFT", 16, -(HEADER + 8))
+    enable:SetPoint("TOPRIGHT", win, "TOPRIGHT", -16, -(HEADER + 8))
+    enable:SetHeight(22)
+
+    local hint = N.FontString(win, 11)
+    hint:SetPoint("TOPLEFT", win, "TOPLEFT", 16, -(HEADER + 70))
+    hint:SetWidth(W - 32)
+    hint:SetJustifyH("LEFT")
+    hint:SetTextColor(uc(M.color.textDim))
+    hint:SetText(L["DEBUG_HINT"])
+
+    local scroll, content = N.MakeScroll(win, -3)
+    scroll:SetPoint("TOPLEFT", win, "TOPLEFT", 14, -(HEADER + 118))
+    scroll:SetPoint("BOTTOMRIGHT", win, "BOTTOMRIGHT", -16, 14)
+    content:SetWidth(W - 14 - 16 - 10)
+
+    local eb = CreateFrame("EditBox", nil, content)
+    eb:SetMultiLine(true)
+    eb:SetAutoFocus(false)
+    eb:SetFont(M.fontUI, 11, "")
+    N.RegisterFont(eb, 11, "")
+    eb:SetTextColor(uc(M.color.text))
+    eb:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+    eb:SetWidth(W - 14 - 16 - 14)
+    eb:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+
+    local shownText = ""
+    eb:SetScript("OnTextChanged", function(self, byUser)
+        if byUser then self:SetText(shownText) end
+    end)
+
+    local function refresh()
+        local log = N.DebugLog
+        local first = math.max(1, #log - 199)
+        shownText = table.concat(log, "\n", first, #log)
+        eb:SetText(shownText)
+        C_Timer.After(0, function()
+            local h = math.max(eb:GetHeight() or 0, 20) + 8
+            content:SetHeight(h)
+            if scroll.SetOffset then scroll.SetOffset(math.max(0, h - scroll:GetHeight())) end
+        end)
+    end
+
+    local clear = ActionButton(win, L["Clear log"], function()
+        wipe(N.DebugLog)
+        refresh()
+    end)
+    clear:SetSize(130, 24)
+    clear:SetPoint("TOPLEFT", win, "TOPLEFT", 16, -(HEADER + 38))
+    local all = ActionButton(win, L["Select all"], function()
+        eb:SetFocus()
+        eb:HighlightText()
+    end)
+    all:SetSize(130, 24)
+    all:SetPoint("LEFT", clear, "RIGHT", 8, 0)
+
+    N.OnDebugLog = function()
+        if win:IsShown() then refresh() end
+    end
+    win:SetScript("OnShow", refresh)
+    return win
+end
+
+function N.ShowDebugConsole()
+    if not debugConsole then debugConsole = BuildDebugConsole() end
+    debugConsole:SetShown(not debugConsole:IsShown())
+end
+
 function N.ToggleOptions()
     if not window then BuildWindow() end
     window:SetShown(not window:IsShown())
@@ -4069,4 +4643,6 @@ N:On("NUCLEUS_DB_READY", function()
     SLASH_NUCLEUS1 = "/nucleus"
     SLASH_NUCLEUS2 = "/nuc"
     SlashCmdList.NUCLEUS = function() N.ToggleOptions() end
+    SLASH_NUCLEUSCONSOLE1 = "/nucconsole"
+    SlashCmdList.NUCLEUSCONSOLE = function() N.ShowDebugConsole() end
 end)

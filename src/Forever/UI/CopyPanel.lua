@@ -26,9 +26,13 @@ local CATEGORIES = {
 local AURA_ROWS = {
     { id = "buffs", label = "Buffs" },
     { id = "debuffs", label = "Debuffs" },
+    { id = "debuffs2", label = "Debuffs 2" },
+    { id = "debuffs3", label = "Debuffs 3" },
+    { id = "debuffs4", label = "Debuffs 4" },
     { id = "dispels", label = "Dispellable Debuffs" },
     { id = "defensives", label = "Defensive Cooldowns" },
     { id = "externals", label = "External Cooldowns" },
+    { id = "defext", label = "Defensives & Externals" },
     { id = "offensives", label = "Offensive Cooldowns" },
     { id = "crowdControls", label = "Crowd Controls" },
 }

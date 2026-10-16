@@ -145,6 +145,10 @@ local function blockLayout(key, n)
     local w, h, sp = cfg.width, cfg.height, cfg.spacing
     local colSp = cfg.columnSpacing or sp
     local horizontal = cfg.orientation == "horizontal"
+    if key == "raid" and N.RaidGrid and N.RaidGrid.Active() then
+        local l = N.RaidGrid.Layout()
+        return 5, horizontal, l.w, l.h, colSp
+    end
     local perCol = (key == "raid") and (cfg.groupBy == "GROUP" and 5 or cfg.unitsPerColumn) or n
     perCol = math.max(1, perCol)
     local cols = math.max(1, math.ceil(n / perCol))
@@ -177,20 +181,37 @@ local function place(container, key, pool, n)
 
     container:SetSize(totalW, totalH)
 
+    local grid = key == "raid" and N.RaidGrid and N.RaidGrid.Active() and N.RaidGrid.Layout() or nil
     for i = 1, n do
         local b = pool[i]
         b:SetSize(w, h)
         local idx = i - 1
-        local col = math.floor(idx / perCol)
-        local pos = idx % perCol
-        local x, y
-        if horizontal then
-            x, y = pos * (w + sp), col * (h + colSp)
-        else
-            x, y = col * (w + colSp), pos * (h + sp)
-        end
         b:ClearAllPoints()
-        b:SetPoint(anchor, container, anchor, sx * x, sy * y)
+        if grid then
+            local slot = grid.slots[math.floor(idx / 5) + 1]
+            local pos = idx % 5
+            local ux, uy = 0, 0
+            if slot then
+                if horizontal then
+                    ux = slot.x + (rev and (grid.gw - w - pos * (w + sp)) or pos * (w + sp))
+                    uy = slot.y
+                else
+                    ux = slot.x
+                    uy = slot.y - (rev and (grid.gh - h - pos * (h + sp)) or pos * (h + sp))
+                end
+            end
+            b:SetPoint("TOPLEFT", container, "TOPLEFT", ux, uy)
+        else
+            local col = math.floor(idx / perCol)
+            local pos = idx % perCol
+            local x, y
+            if horizontal then
+                x, y = pos * (w + sp), col * (h + colSp)
+            else
+                x, y = col * (w + colSp), pos * (h + sp)
+            end
+            b:SetPoint(anchor, container, anchor, sx * x, sy * y)
+        end
     end
 end
 

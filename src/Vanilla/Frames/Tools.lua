@@ -4,8 +4,7 @@ local M = N.Media
 local L = N.L
 local IsSecret = N.IsSecret
 
--- Utilities: three movable displays with their own settings (N.db.tools.*): readyPull (Ready Check + Pull
--- Timer), battleRes, marks (target / world marker bar). Always shown while "Move tools" is on.
+-- Utilities: ready & pull, battle res and marks, each with its own settings (N.db.tools.*).
 
 local T = {}
 N.Tools = T
@@ -28,13 +27,46 @@ local function canControl()
     return UnitIsGroupLeader("player") or (IsInRaid() and UnitIsGroupAssistant("player")) or false
 end
 
--- Show / hide that stays safe next to protected children in combat.
-local function setVisible(host, on)
-    if not InCombatLockdown() then host:SetShown(on) end
-    host:SetAlpha(on and 1 or 0)
+-- Show only on mouseover: the tool fades out and back in; a child frame drives the fade so the host keeps its
+-- own OnUpdate.
+local FADE_TIME = 0.25
+local function fadeStep(driver, elapsed)
+    local host = driver:GetParent()
+    local top = host._maxAlpha or 1
+    local want = host:IsMouseOver() and top or 0
+    local a = host._fadeAlpha or 0
+    if a == want then return end
+    local step = elapsed / FADE_TIME * top
+    a = want > a and math.min(want, a + step) or math.max(want, a - step)
+    host._fadeAlpha = a
+    host:SetAlpha(a)
 end
 
--- host frames: position + drag handle
+-- Show / hide that stays safe next to protected children in combat.
+local function setVisible(host, on, hoverOnly)
+    if not InCombatLockdown() then host:SetShown(on) end
+    local top = host._maxAlpha or 1
+    local driver = host._fadeDriver
+    if on and hoverOnly and not unlocked() then
+        if not driver then
+            driver = CreateFrame("Frame", nil, host)
+            host._fadeDriver = driver
+        end
+        if not host._fading then
+            host._fading = true
+            host._fadeAlpha = host:GetAlpha()
+            driver:SetScript("OnUpdate", fadeStep)
+        end
+        return
+    end
+    if host._fading then
+        host._fading = nil
+        driver:SetScript("OnUpdate", nil)
+    end
+    host._fadeAlpha = on and top or 0
+    host:SetAlpha(host._fadeAlpha)
+end
+
 
 local hosts = {}
 
@@ -90,8 +122,51 @@ local function makeHost(key, title)
 end
 
 
+-- Background, border, opacity and strata of a tool. Strata is only touched out of combat.
+local function applyLook(host, c)
+    if not InCombatLockdown() then host:SetFrameStrata(c.strata or "MEDIUM") end
+    host._maxAlpha = c.alpha or 1
+    if not host._fill then
+        host._fill = host:CreateTexture(nil, "BACKGROUND")
+        host._edges = {}
+        for i = 1, 4 do host._edges[i] = host:CreateTexture(nil, "BACKGROUND", nil, 1) end
+    end
+    local fill, edges = host._fill, host._edges
+    local show = c.backdrop and true or false
+    local bw = math.max(0, c.border or 0)
+    fill:SetShown(show)
+    if show then
+        local bg = c.background or { 0.05, 0.05, 0.07 }
+        fill:ClearAllPoints()
+        fill:SetPoint("TOPLEFT", host, "TOPLEFT", -3, 3)
+        fill:SetPoint("BOTTOMRIGHT", host, "BOTTOMRIGHT", 3, -3)
+        fill:SetColorTexture(bg[1], bg[2], bg[3], 0.85)
+    end
+    local edgesOn = show and bw > 0
+    for i = 1, 4 do edges[i]:SetShown(edgesOn) end
+    if not edgesOn then return end
+    local bc = c.borderColor or { 0.2, 0.2, 0.25 }
+    for i = 1, 4 do edges[i]:SetColorTexture(bc[1], bc[2], bc[3], 1) end
+    edges[1]:ClearAllPoints()
+    edges[1]:SetPoint("TOPLEFT", fill, "TOPLEFT", -bw, bw)
+    edges[1]:SetPoint("TOPRIGHT", fill, "TOPRIGHT", bw, bw)
+    edges[1]:SetHeight(bw)
+    edges[2]:ClearAllPoints()
+    edges[2]:SetPoint("BOTTOMLEFT", fill, "BOTTOMLEFT", -bw, -bw)
+    edges[2]:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", bw, -bw)
+    edges[2]:SetHeight(bw)
+    edges[3]:ClearAllPoints()
+    edges[3]:SetPoint("TOPLEFT", fill, "TOPLEFT", -bw, 0)
+    edges[3]:SetPoint("BOTTOMLEFT", fill, "BOTTOMLEFT", -bw, 0)
+    edges[3]:SetWidth(bw)
+    edges[4]:ClearAllPoints()
+    edges[4]:SetPoint("TOPRIGHT", fill, "TOPRIGHT", bw, 0)
+    edges[4]:SetPoint("BOTTOMRIGHT", fill, "BOTTOMRIGHT", bw, 0)
+    edges[4]:SetWidth(bw)
+end
+
 local rp
-local pullEnd, pullTotal
+local pullEnd, pullTotal, finishUntil
 
 local function pullMacros(c)
     local sec = c.pullTime or 10
@@ -151,17 +226,40 @@ local function buildReadyPull()
         acc = acc + dt
         if acc < 0.05 then return end
         acc = 0
+        if finishUntil and GetTime() >= finishUntil then
+            finishUntil = nil
+            pull.text:SetText(L["Pull"])
+        end
         if not pullEnd then return end
+        local c = cfg("readyPull") or {}
         local left = pullEnd - GetTime()
         if left <= 0 then
             pullEnd = nil
             bar:Hide()
-            pull.text:SetText(L["Pull"])
+            if c.pullFinishText == "go" then
+                pull.text:SetText(L["Go!"])
+                finishUntil = GetTime() + 1.5
+            elseif c.pullFinishText == "zero" then
+                pull.text:SetText("0")
+                finishUntil = GetTime() + 1.5
+            else
+                pull.text:SetText(L["Pull"])
+            end
             return
         end
-        bar:SetMinMaxValues(0, pullTotal or left)
+        local total = pullTotal or left
+        bar:SetMinMaxValues(0, total)
         bar:SetValue(left)
-        pull.text:SetFormattedText("%.1f", left)
+        local mode = c.pullTimerMode
+        if mode == "elapsed" then
+            pull.text:SetFormattedText("%.1f", math.max(0, total - left))
+        elseif mode == "elapsedTotal" then
+            pull.text:SetFormattedText("%.1f / %.0f", math.max(0, total - left), total)
+        elseif mode == "remainingTotal" then
+            pull.text:SetFormattedText("%.1f / %.0f", left, total)
+        else
+            pull.text:SetFormattedText("%.1f", left)
+        end
     end)
 end
 
@@ -196,6 +294,7 @@ local function layoutReadyPull()
     rp.pull:SetAttribute("macrotext2", b2)
     rp.pull.bar:SetStatusBarColor(M.color.accent[1], M.color.accent[2], M.color.accent[3], 0.55)
     loadPosition(rp, c)
+    applyLook(rp, c)
 end
 
 local function updateReadyPull()
@@ -203,7 +302,7 @@ local function updateReadyPull()
     local c = cfg("readyPull")
     if not c then return end
     local show = c.enabled and (unlocked() or (IsInGroup() and (c.onlyLeader == false or canControl())))
-    setVisible(rp, show and true or false)
+    setVisible(rp, show and true or false, c.fadeOut)
     rp.handle:SetShown(c.enabled and unlocked() and true or false)
 end
 
@@ -270,6 +369,7 @@ local function layoutBattleRes()
         br:SetSize(size + 6 + math.max(14, size * 0.7), size)
     end
     loadPosition(br, c)
+    applyLook(br, c)
 end
 
 function T.UpdateBattleRes()
@@ -278,7 +378,7 @@ function T.UpdateBattleRes()
     if not c then return end
     local info = N.Compat.Spell and N.Compat.Spell.GetSpellCharges and N.Compat.Spell.GetSpellCharges(BR_SPELL)
     local show = c.enabled and (info ~= nil or unlocked())
-    setVisible(br, show and true or false)
+    setVisible(br, show and true or false, c.fadeOut)
     br.handle:SetShown(c.enabled and unlocked() and true or false)
     if not show then return end
 
@@ -395,6 +495,7 @@ local function layoutMarks()
     local short = #rows * size + (#rows - 1) * gap
     if vertical then mk:SetSize(short, long) else mk:SetSize(long, short) end
     loadPosition(mk, c)
+    applyLook(mk, c)
 end
 
 local function updateMarks()
@@ -402,7 +503,7 @@ local function updateMarks()
     local c = cfg("marks")
     if not c then return end
     local show = c.enabled and (unlocked() or (c.onlyLeader == false or canControl()))
-    setVisible(mk, show and true or false)
+    setVisible(mk, show and true or false, c.fadeOut)
     mk.handle:SetShown(c.enabled and unlocked() and true or false)
     local has = UnitExists("target") and true or false
     for _, b in ipairs(mk.target) do b:SetAlpha(has and 1 or 0.45) end
@@ -442,7 +543,7 @@ ev:SetScript("OnEvent", function(_, event, ...)
         local _, remaining, total = ...
         if remaining and not IsSecret(remaining) then onCountdown(remaining, total or remaining) end
     elseif event == "CANCEL_PLAYER_COUNTDOWN" then
-        pullEnd = nil
+        pullEnd, finishUntil = nil, nil
         if rp then rp.pull.bar:Hide(); rp.pull.text:SetText(L["Pull"]) end
     elseif event == "PLAYER_REGEN_ENABLED" then
         T.Refresh()
@@ -455,4 +556,102 @@ N:On("NUCLEUS_DB_READY", function() C_Timer.After(0, T.Refresh) end)
 N:On("NUCLEUS_PROFILE_CHANGED", function() C_Timer.After(0, T.Refresh) end)
 N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
     if path and path:find("^tools") then T.Refresh() end
+end)
+
+-- Death Report: announces group member deaths. Nothing is registered while it is off.
+local deathState, sent = {}, {}
+local deathActive = false
+local deathFrame = CreateFrame("Frame")
+
+local function groupChannel()
+    if IsInGroup and LE_PARTY_CATEGORY_INSTANCE and IsInGroup(LE_PARTY_CATEGORY_INSTANCE) then return "INSTANCE_CHAT" end
+    if IsInRaid() then return "RAID" end
+    if IsInGroup() then return "PARTY" end
+end
+
+local function inEncounter()
+    if IsEncounterInProgress then return IsEncounterInProgress() end
+    return UnitAffectingCombat("player")
+end
+
+local function announce(name, class, c)
+    if c.output == "group" and (not c.leaderOnly or canControl()) then
+        local now = GetTime()
+        while sent[1] and now - sent[1] > 10 do table.remove(sent, 1) end
+        if #sent >= 5 then return end
+        local locked = C_ChatInfo and C_ChatInfo.InChatMessagingLockdown and C_ChatInfo.InChatMessagingLockdown()
+        local channel = groupChannel()
+        if channel and not locked and pcall(SendChatMessage, L["DEATH_MSG"]:format(name), channel) then
+            sent[#sent + 1] = now
+            return
+        end
+    end
+    local r, g, b = N.ClassRGB(class)
+    N:Print(L["DEATH_MSG"]:format(("|cff%02x%02x%02x%s|r"):format(math.floor(r * 255 + 0.5), math.floor(g * 255 + 0.5), math.floor(b * 255 + 0.5), name)))
+end
+
+local function observeDeath(unit)
+    if type(unit) ~= "string" then return end
+    if not (unit == "player" or unit:find("^party%d") or unit:find("^raid%d")) then return end
+    local guid = UnitGUID(unit)
+    if not guid or IsSecret(guid) then return end
+    local dead = UnitIsDeadOrGhost(unit)
+    if dead == nil or IsSecret(dead) then return end
+    local feign = UnitIsFeignDeath and UnitIsFeignDeath(unit)
+    if IsSecret(feign) then return end
+    if feign then dead = false end
+    dead = dead and true or false
+    local previous = deathState[guid]
+    deathState[guid] = dead
+    if not (dead and previous == false) then return end
+
+    local c = cfg("deathReport")
+    if not (c and c.enabled) then return end
+    if c.encounterOnly and not inEncounter() then return end
+    if c.rolesOnly then
+        local role = UnitGroupRolesAssigned(unit)
+        if IsSecret(role) or (role ~= "TANK" and role ~= "HEALER") then return end
+    end
+    local name = UnitName(unit)
+    if not name or IsSecret(name) then return end
+    local _, class = UnitClass(unit)
+    if IsSecret(class) then class = nil end
+    announce(name, class, c)
+end
+
+local function rescanDeaths()
+    wipe(deathState)
+    observeDeath("player")
+    for i = 1, 4 do if UnitExists("party" .. i) then observeDeath("party" .. i) end end
+    for i = 1, 40 do if UnitExists("raid" .. i) then observeDeath("raid" .. i) end end
+end
+
+deathFrame:SetScript("OnEvent", function(_, event, unit)
+    if event == "UNIT_HEALTH" or event == "UNIT_FLAGS" then
+        observeDeath(unit)
+    else
+        rescanDeaths()
+    end
+end)
+
+local function configureDeath()
+    local c = cfg("deathReport")
+    local want = (c and c.enabled) and true or false
+    if want == deathActive then return end
+    deathActive = want
+    if want then
+        for _, e in ipairs({ "UNIT_HEALTH", "UNIT_FLAGS", "GROUP_ROSTER_UPDATE", "PLAYER_ENTERING_WORLD" }) do
+            deathFrame:RegisterEvent(e)
+        end
+        rescanDeaths()
+    else
+        deathFrame:UnregisterAllEvents()
+        wipe(deathState)
+        wipe(sent)
+    end
+end
+
+N:On("NUCLEUS_DB_READY", function() C_Timer.After(0, configureDeath) end)
+N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
+    if path and path:find("^tools") then configureDeath() end
 end)
