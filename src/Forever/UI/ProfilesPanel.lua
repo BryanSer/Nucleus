@@ -564,6 +564,85 @@ local function BuildShare(p)
     p:AddCard(b)
 end
 
+local PART_LABEL = {
+    size = "Size & spacing", layout = "Arrangement (direction, order, columns)",
+    position = "Position on screen", appearance = "Appearance (bars, colours, borders)",
+    indicators = "Indicators", auras = "Auras", custom = "Custom indicators (all of them)",
+}
+local WHOLE_LABEL = {
+    ownPet = "MODE_ownPet", groupPets = "MODE_groupPets", npc = "MODE_npc", spotlight = "MODE_spotlight",
+    tooltip = "Tooltip", clickCasting = "Click-Casting", targetedSpellBars = "Targeted Spell Bars",
+    actions = "Actions", tools = "Utilities", ping = "Ping",
+}
+
+local function BuildSync(p)
+    local P = N.Profiles
+    local s = P.SyncConfig()
+    if not s then return end
+
+    local c = N.MakeCard(p, L["SYNC_TITLE"])
+    local options = { { value = "", text = L["SYNC_NONE"] } }
+    for _, name in ipairs(P.List()) do options[#options + 1] = { value = name, text = name } end
+    c:AddRow(N.MakeDropdown(c, L["SYNC_MASTER"], options,
+        function() return s.master or "" end,
+        function(v)
+            s.master = v
+            for i = #s.slaves, 1, -1 do
+                if s.slaves[i] == v then table.remove(s.slaves, i) end
+            end
+            N:Fire("NUCLEUS_PROFILES_CHANGED")
+        end))
+    Hint(c, L["SYNC_HINT"])
+    p:AddCard(c)
+    if s.master == "" or not P.Exists(s.master) then return end
+
+    local follow = N.MakeCard(p, L["SYNC_FOLLOWS"])
+    for _, name in ipairs(P.List()) do
+        if name ~= s.master then
+            follow:AddRow(N.MakeCheckbox(follow, name,
+                function()
+                    for _, n in ipairs(s.slaves) do if n == name then return true end end
+                    return false
+                end,
+                function(v)
+                    for i = #s.slaves, 1, -1 do
+                        if s.slaves[i] == name then table.remove(s.slaves, i) end
+                    end
+                    if v then s.slaves[#s.slaves + 1] = name end
+                end))
+        end
+    end
+    p:AddCard(follow)
+
+    for _, g in ipairs({ "party", "raid" }) do
+        local card = N.MakeCard(p, L["SYNC_PARTS"] .. " - " .. L["MODE_" .. g])
+        for _, part in ipairs(P.SYNC_GROUP_PARTS) do
+            local key = g .. "." .. part
+            card:AddRow(N.MakeCheckbox(card, L[PART_LABEL[part]],
+                function() return s.parts[key] == true end,
+                function(v) s.parts[key] = v and true or false end))
+        end
+        p:AddCard(card)
+    end
+
+    local other = N.MakeCard(p, L["SYNC_PARTS"])
+    for _, k in ipairs(P.SYNC_WHOLE) do
+        if P.KEYSET[k] then
+            other:AddRow(N.MakeCheckbox(other, L[WHOLE_LABEL[k]],
+                function() return s.parts[k] == true end,
+                function(v) s.parts[k] = v and true or false end))
+        end
+    end
+    other:AddRow(ButtonRow(other, { { L["SYNC_NOW"], function()
+        local n = #P.SyncSlaves()
+        if n == 0 then N:Print(L["SYNC_NO_LINKED"]); return end
+        N.Dialog.Confirm(L["SYNC_CONFIRM"]:format(s.master, n), function()
+            N:Print(L["SYNC_DONE"]:format(P.SyncNow(), s.master))
+        end)
+    end } }))
+    p:AddCard(other)
+end
+
 local function Build(p)
     for _, child in ipairs({ p:GetChildren() }) do
         child:Hide()
@@ -572,6 +651,7 @@ local function Build(p)
     p._y = -4
     BuildProfiles(p)
     BuildAutoSwitch(p)
+    BuildSync(p)
     local cc = N.MakeCard(p, L["Copy settings between Party and Raid"])
     cc:AddRow(ButtonRow(cc, { { L["Open copy window"], function() N.ShowCopyPopup() end } }))
     Hint(cc, L["COPY_HINT"])

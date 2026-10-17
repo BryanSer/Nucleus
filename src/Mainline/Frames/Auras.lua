@@ -93,7 +93,39 @@ acFrame:RegisterEvent("UNIT_AURA")
 acFrame:RegisterEvent("GROUP_ROSTER_UPDATE")
 acFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 acFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
+-- After combat only the units whose data may be sealed or incomplete are scanned again, a few per frame.
+local regenQueue = {}
+local regenDriver = CreateFrame("Frame")
+regenDriver:Hide()
+regenDriver:SetScript("OnUpdate", function(self)
+    if InCombatLockdown() then
+        wipe(regenQueue)
+        self:Hide()
+        return
+    end
+    local deadline = debugprofilestop() + 5
+    while #regenQueue > 0 do
+        local u = table.remove(regenQueue, 1)
+        local e = cache[u]
+        if e and (e.stale or e.refused or not e.scanned) then
+            e.auras, e.scanned, e.refused, e.stale = {}, false, false, nil
+            entry(u)
+            notify(u)
+        end
+        if debugprofilestop() > deadline then break end
+    end
+    if #regenQueue == 0 then self:Hide() end
+end)
+
 acFrame:SetScript("OnEvent", function(_, event, unit, info)
+    if event == "PLAYER_REGEN_ENABLED" then
+        wipe(regenQueue)
+        for u, e in pairs(cache) do
+            if e.stale or e.refused or not e.scanned then regenQueue[#regenQueue + 1] = u end
+        end
+        if #regenQueue > 0 then regenDriver:Show() end
+        return
+    end
     if event ~= "UNIT_AURA" then
         for u, e in pairs(cache) do
             e.auras, e.scanned, e.refused = {}, false, false
@@ -110,26 +142,29 @@ acFrame:SetScript("OnEvent", function(_, event, unit, info)
         or IsSecret(info.addedAuras) or IsSecret(info.updatedAuraInstanceIDs)
         or IsSecret(info.removedAuraInstanceIDs))
     if sealed then
-        if not InCombatLockdown() then scanUnit(unit, e) end
+        if InCombatLockdown() then e.stale = true else scanUnit(unit, e) end
     elseif info == nil or info.isFullUpdate then
         e.auras, e.scanned, e.refused = {}, false, false
         entry(unit)
     else
+        local inCombat = InCombatLockdown()
         for _, raw in ipairs(info.addedAuras or {}) do
             local id = raw and raw.auraInstanceID
             if id ~= nil and not IsSecret(id) then
                 local d = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, id)
                 if d then e.auras[id] = d end
             end
+            if inCombat then e.stale = true end -- data read in combat may stay sealed
         end
         for _, id in ipairs(info.updatedAuraInstanceIDs or {}) do
             if not IsSecret(id) then
                 local d = C_UnitAuras.GetAuraDataByAuraInstanceID(unit, id)
                 if d then e.auras[id] = d else e.auras[id] = nil end
             end
+            if inCombat then e.stale = true end
         end
         for _, id in ipairs(info.removedAuraInstanceIDs or {}) do
-            if not IsSecret(id) then e.auras[id] = nil end
+            if not IsSecret(id) then e.auras[id] = nil else e.stale = true end
         end
     end
     notify(unit)
@@ -586,7 +621,7 @@ local function apply(icon, d, cfg, row, unit)
     icon.tex:SetTexture(d.icon)
 
     -- Cooldown: plain numbers when readable, the duration object when hidden; the cooldown frame draws the text.
-    local style = cfg.cdStyle or "spiral"
+    local style = N.CooldownStyle(icon._gk, cfg.cdStyle)
     local wantAnim, wantTime = cfg.showCooldown, cfg.showTime
     local active = false
     local mask = icon.mask
@@ -985,7 +1020,7 @@ local function rowSpec(b, row, cfg)
     local spec = {
         shape = "icon", size = cfg.size, spacing = cfg.spacing, point = cfg.point, x = cfg.x, y = cfg.y,
         growth = cfg.growth, max = cfg.max, perRow = cfg.perRow, lineSpacing = cfg.lineSpacing,
-        cd = cfg.showCooldown and (cfg.cdStyle or "spiral") or "none",
+        cd = cfg.showCooldown and N.CooldownStyle(b.groupKey, cfg.cdStyle) or "none",
         stacks = cfg.showStacks, time = cfg.showTime,
         timeSize = cfg.timeSize, timeX = cfg.timeX, timeY = cfg.timeY,
         stackSize = cfg.stackSize, stackX = cfg.stackX, stackY = cfg.stackY,
@@ -1055,7 +1090,26 @@ local function rowSpec(b, row, cfg)
         end
     end
     if #spec.groups == 0 then return nil end
+    if cfg.glow == "icon" and spec.shape == "icon" then
+        spec.iconGlow = { style = cfg.glowStyle or "pixel", color = cfg.glowColor or { 1, 0.85, 0.2 },
+            speed = cfg.glowSpeed or 0.15, length = cfg.glowLength or 6, thickness = cfg.glowThickness or 2,
+            offset = cfg.glowOffset or 0 }
+    end
     return spec
+end
+
+-- "Around the unit frame": the same aura groups once more, as a frame-wide glow that shows while any matches.
+local function frameGlowSpec(spec, cfg)
+    local groups = {}
+    for i, g in ipairs(spec.groups) do
+        groups[i] = { key = g.key, filter = g.filter, candidate = g.candidate, max = 1 }
+    end
+    return {
+        shape = "glow", point = "CENTER", x = 0, y = 0, size = 1, spacing = 0, max = 1,
+        color = cfg.glowColor or { 1, 0.85, 0.2 }, glow = cfg.glowStyle or "pixel",
+        offset = cfg.glowOffset or 0, thickness = cfg.glowThickness or 2, speed = cfg.glowSpeed or 0.15,
+        length = cfg.glowLength or 6, cd = "none", groups = groups,
+    }
 end
 
 local function engineOn(b)
@@ -1071,6 +1125,7 @@ local function syncEngine(b)
         local spec
         if live and not (b._previewOnly and b._previewOnly ~= row.cfg) then spec = rowSpec(b, row, cfg) end
         E.Apply(b, "row:" .. row.cfg, spec)
+        E.Apply(b, "row:" .. row.cfg .. "#glow", (spec and cfg.glow == "frame") and frameGlowSpec(spec, cfg) or nil)
     end
     b._engineSynced = true
     b._engineLive = live and true or false
@@ -1136,7 +1191,7 @@ function A.Update(b)
             for i = 1, cfg.max do
                 local ic = pool[i]
                 if ic then
-                    if iconsOn and list[i] then apply(ic, list[i], cfg, row, b.unit) else ic:Hide() end
+                    if iconsOn and list[i] then ic._gk = b.groupKey; apply(ic, list[i], cfg, row, b.unit) else ic:Hide() end
                 end
             end
             if row.kind == "dispel" then updateFX(b, cfg, list, b.unit) end

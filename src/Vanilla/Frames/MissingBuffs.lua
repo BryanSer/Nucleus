@@ -121,7 +121,7 @@ local function refresh(b)
         local o = N.db and N.db[b.groupKey] and N.db[b.groupKey].indicators.missingBuffs
         local missing
         local u = b.unit
-        if o and o.enabled and u and UnitExists(u) and not (o.hideInCombat and InCombatLockdown()) then
+        if o and o.enabled and u and UnitExists(u) and not (o.hideInCombat and N.InCombat()) then
             local connected, dead = UnitIsConnected(u), UnitIsDeadOrGhost(u)
             -- Out of sight: the client has no aura data for that member, so nothing is shown.
             local visible = UnitIsVisible(u)

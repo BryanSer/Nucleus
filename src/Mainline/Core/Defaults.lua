@@ -66,6 +66,8 @@ local function groupDefaults(overrides)
 
         appearance = {
             outOfRangeAlpha = 0.45,
+            cdStyleMode = "row",           -- "row" (each indicator decides) | "global"
+            cdStyleGlobal = "spiral",       -- "spiral" | "vertical"
             barTexture = "nucleus",          -- "flat" | "gradient" | "modern" | "nucleus"
             healthColorMode = "class",       -- "class" | "custom" | "gradient"
             healthCustomColor = { 0.20, 0.55, 0.95 },
@@ -246,6 +248,15 @@ local function groupDefaults(overrides)
         timePoint = "CENTER", timeBaseColor = { 1, 1, 1 }, useFilter = false,
         list = t.auras.defensives.list .. "," .. t.auras.externals.list,
     }
+    -- Row glow: "off", "icon" (around each icon) or "frame" (around the whole unit frame).
+    for _, k in ipairs({ "buffs", "debuffs", "debuffs2", "debuffs3", "debuffs4", "defensives", "externals",
+                         "defext", "offensives", "crowdControls" }) do
+        local row = t.auras[k]
+        if row then
+            row.glow, row.glowStyle, row.glowColor = "off", "pixel", { 1, 0.85, 0.2 }
+            row.glowSpeed, row.glowLength, row.glowThickness, row.glowOffset = 0.15, 6, 2, 0
+        end
+    end
     for k, v in pairs(overrides or {}) do
         if type(v) == "table" and type(t[k]) == "table" then
             deepMerge(t[k], v)
@@ -263,6 +274,8 @@ local function petDefaults(o)
         showSolo = true,
         -- Attach to the owner's frame: side, gap and sideways shift.
         attachEnabled = true, attachSide = "RIGHT", attachGap = 2, attachShift = 0,
+        -- Hang on the party / raid frames instead of a free position.
+        hostEnabled = false, hostSide = "RIGHT", hostGap = 4, hostShift = 0,
         appearance = { healthColorMode = "custom", healthCustomColor = { 0.35, 0.75, 0.40 } },
         indicators = {
             role = { enabled = false }, leader = { enabled = false },
@@ -285,6 +298,19 @@ N.Defaults = {
     editMode = "party", -- party | raid | ownPet | groupPets | npc | spotlight
     lastPetMode = "ownPet", -- the pet-side group the "Pets" switch opens
     -- Which areas every profile shares ("global") instead of keeping per profile; see Profiles.lua
+    -- Master profile: the linked profiles follow it in the ticked parts.
+    profileSync = {
+        master = "",
+        slaves = { _list = true },
+        parts = {
+            ["party.size"] = false, ["party.layout"] = false, ["party.position"] = false,
+            ["party.appearance"] = true, ["party.indicators"] = true, ["party.auras"] = true, ["party.custom"] = true,
+            ["raid.size"] = false, ["raid.layout"] = false, ["raid.position"] = false,
+            ["raid.appearance"] = true, ["raid.indicators"] = true, ["raid.auras"] = true, ["raid.custom"] = true,
+            ownPet = false, groupPets = false, npc = false, spotlight = false, tooltip = false,
+            clickCasting = false, targetedSpellBars = false, actions = false, tools = false, ping = false,
+        },
+    },
     profileScope = { tooltip = "profile", clickCasting = "profile", utilities = "profile", spotlight = "profile" },
     -- Test Mode: sections previewed besides the one being edited (the menu next to the button)
     testSections = { party = false, raid = false, ownPet = false, groupPets = false, npc = false, spotlight = false },
@@ -377,6 +403,7 @@ N.Defaults = {
         showSolo = true,
         width = 80, height = 40, spacing = 3,
         x = 24, y = -640,
+        hostEnabled = false, hostSide = "RIGHT", hostGap = 4, hostShift = 0,
         units = { _list = true },
         indicators = { powerBar = { enabled = true } },
     }),

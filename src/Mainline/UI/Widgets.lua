@@ -10,8 +10,7 @@ local function unpackColor(c) return c[1], c[2], c[3], c[4] or 1 end
 local ROW_CHECK = 24
 local ROW_CONTROL = 30
 
--- Section card: a rounded surface with a small accent tab and the title on top, a hairline beneath
--- it and rows flowing below with inner padding.
+-- Section card: the title on top, the rows stacked below with inner padding.
 
 local CARD_PAD = 12
 local CARD_HEADER = 32
@@ -427,8 +426,7 @@ end)
 local DD_ROW = 22
 local DD_BTN_W = 160
 
--- Flat triangular caret drawn by collapsing two quad corners, so it needs no
--- texture asset and stays crisp at any UI scale. dir "down" | "up".
+-- Triangular caret drawn from a quad with two corners collapsed, no texture needed. dir "down" | "up".
 local function shapeCaret(tex, dir)
     local w = tex:GetWidth()
     if dir == "up" then
@@ -904,8 +902,6 @@ end
 -- Custom scroll area: thin auto-hiding accent scrollbar with wheel support; trackX moves the bar right of the
 -- area's edge (negative to tuck it inside a small panel).
 
--- trackX: how far the bar sits right of the scroll area's edge (default 10, i.e.
--- in the margin; pass a negative number to tuck it inside a small panel).
 function N.MakeScroll(parent, trackX)
     local scroll = CreateFrame("ScrollFrame", nil, parent)
     local child = CreateFrame("Frame", nil, scroll)

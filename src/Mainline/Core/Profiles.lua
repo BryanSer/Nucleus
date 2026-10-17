@@ -50,7 +50,6 @@ local active   -- the active profile's table
 local activeName
 local profileDefaults
 
--- setup (called once from Database.InitDB)
 
 local function buildDefaults()
     profileDefaults = {}
@@ -175,7 +174,6 @@ local function cleanName(name)
 end
 P.CleanName = cleanName
 
--- A name that doesn't clash with an existing profile ("Raid", "Raid (2)", ...).
 function P.UniqueName(name)
     name = cleanName(name) or "Profile"
     if not raw.profiles[name] then return name end
@@ -184,6 +182,19 @@ function P.UniqueName(name)
     return name .. " (" .. i .. ")"
 end
 
+
+-- A profile's generation goes up whenever its settings tables are replaced; the options window keeps its
+-- built pages per profile and only reuses them while the generation is unchanged.
+local gens = {}
+function P.Generation(name) return gens[name] or 0 end
+local function bumpGeneration(name)
+    if name then
+        gens[name] = (gens[name] or 0) + 1
+    else
+        for n in pairs(raw.profiles) do gens[n] = (gens[n] or 0) + 1 end
+    end
+end
+P.BumpGeneration = bumpGeneration
 
 -- Replays settings events so every module re-reads the active profile.
 local function reapply()
@@ -223,6 +234,117 @@ function P.Create(name, copyFrom)
     return name
 end
 
+-- Master profile: edits made while the master is active are copied into the linked profiles, in the ticked
+-- parts only. Everything else stays profile-specific.
+local SYNC_FIELDS = {
+    size     = { "width", "height", "spacing", "columnSpacing" },
+    layout   = { "orientation", "reverse", "groupBy", "sortMethod", "unitsPerColumn", "maxColumns",
+                 "attachEnabled", "attachSide", "attachGap", "attachShift", "ordering" },
+    position = { "point", "x", "y", "hostEnabled", "hostSide", "hostGap", "hostShift" },
+}
+local SYNC_TABLES = { appearance = "appearance", indicators = "indicators", auras = "auras", custom = "customIndicators" }
+P.SYNC_GROUP_PARTS = { "size", "layout", "position", "appearance", "indicators", "auras", "custom" }
+P.SYNC_WHOLE = { "ownPet", "groupPets", "npc", "spotlight", "tooltip", "clickCasting", "targetedSpellBars",
+                 "actions", "tools", "ping" }
+
+function P.SyncConfig() return raw and raw.profileSync end
+
+function P.SyncSlaves()
+    local out, s = {}, raw and raw.profileSync
+    if type(s) ~= "table" then return out end
+    for _, name in ipairs(s.slaves or {}) do
+        if name ~= s.master and raw.profiles[name] then out[#out + 1] = name end
+    end
+    return out
+end
+
+function P.SyncActive()
+    local s = raw and raw.profileSync
+    return s and s.master ~= "" and s.master == activeName and #P.SyncSlaves() > 0 or false
+end
+
+function P.SyncNow()
+    local s = raw and raw.profileSync
+    local src = s and s.master ~= "" and raw.profiles[s.master]
+    if not src then return 0 end
+    local count, touchedActive = 0, false
+    for _, name in ipairs(P.SyncSlaves()) do
+        local dst = raw.profiles[name]
+        for _, g in ipairs({ "party", "raid" }) do
+            local from, to = src[g], dst[g]
+            if type(from) == "table" and type(to) == "table" then
+                for _, part in ipairs(P.SYNC_GROUP_PARTS) do
+                    if s.parts[g .. "." .. part] == true then
+                        if SYNC_FIELDS[part] then
+                            for _, k in ipairs(SYNC_FIELDS[part]) do
+                                if from[k] ~= nil then to[k] = N.DeepCopy(from[k]) end
+                            end
+                        else
+                            local k = SYNC_TABLES[part]
+                            if from[k] ~= nil then to[k] = N.DeepCopy(from[k]) end
+                        end
+                    end
+                end
+            end
+        end
+        for _, k in ipairs(P.SYNC_WHOLE) do
+            local area = SCOPE_OF[k]
+            local shared = area and raw.profileScope and raw.profileScope[area] == "global"
+            if KEYSET[k] and s.parts[k] == true and not shared and src[k] ~= nil then
+                dst[k] = N.DeepCopy(src[k])
+            end
+        end
+        linkGroups(dst)
+        bumpGeneration(name)
+        count = count + 1
+        if name == activeName then touchedActive = true end
+    end
+    if touchedActive then
+        reapply()
+        N:Fire("NUCLEUS_PROFILE_CHANGED", activeName)
+    end
+    return count
+end
+
+local syncPending
+local function queueSync()
+    if syncPending then return end
+    syncPending = true
+    C_Timer.After(1, function()
+        syncPending = false
+        if P.SyncActive() then P.SyncNow() end
+    end)
+end
+N:On("NUCLEUS_SETTING_CHANGED", function(_, section)
+    if raw and KEYSET[section] and P.SyncActive() then queueSync() end
+end)
+N:On("NUCLEUS_FRAME_MOVED", function()
+    if raw and P.SyncActive() then queueSync() end
+end)
+local syncLogout = CreateFrame("Frame")
+syncLogout:RegisterEvent("PLAYER_LOGOUT")
+syncLogout:SetScript("OnEvent", function()
+    if raw and P.SyncActive() then P.SyncNow() end
+end)
+
+local function syncRename(old, new)
+    local s = raw.profileSync
+    if type(s) ~= "table" then return end
+    if s.master == old then s.master = new end
+    for i, name in ipairs(s.slaves or {}) do
+        if name == old then s.slaves[i] = new end
+    end
+end
+
+local function syncForget(name)
+    local s = raw.profileSync
+    if type(s) ~= "table" then return end
+    if s.master == name then s.master = "" end
+    for i = #(s.slaves or {}), 1, -1 do
+        if s.slaves[i] == name then table.remove(s.slaves, i) end
+    end
+end
+
 local function renameInAutoSwitch(old, new)
     local function walk(t)
         for sit, target in pairs(t) do
@@ -240,6 +362,7 @@ function P.Rename(old, new)
     raw.profiles[old] = nil
     if activeName == old then activeName = new; raw.currentProfile = new end
     renameInAutoSwitch(old, new)
+    syncRename(old, new)
     N:Fire("NUCLEUS_PROFILES_CHANGED")
     return true
 end
@@ -260,6 +383,7 @@ function P.Delete(name)
     end
     for _, t in pairs(raw.autoSwitch.role) do clear(t) end
     for _, t in pairs(raw.autoSwitch.spec) do clear(t) end
+    syncForget(name)
     N:Fire("NUCLEUS_PROFILES_CHANGED")
     return true
 end
@@ -298,6 +422,7 @@ function P.SetScope(area, scope)
         end
     end
     raw.profileScope[area] = scope
+    bumpGeneration()
     reapply()
     N:Fire("NUCLEUS_PROFILE_CHANGED", activeName)
     N:Fire("NUCLEUS_PROFILES_CHANGED")
@@ -324,13 +449,14 @@ function P.SetLink(cat, on)
     else
         raid[cat] = N.DeepCopy(party[cat])
     end
+    bumpGeneration(activeName)
     reapply()
     N:Fire("NUCLEUS_PROFILE_CHANGED", activeName)
 end
 
 -- After something replaced a table (copying between Group and Raid): join the shared parts again.
 function P.RelinkGroups()
-    if active then linkGroups(active) end
+    if active then linkGroups(active); bumpGeneration(activeName) end
 end
 
 
@@ -348,6 +474,7 @@ end
 -- Writes data over a profile (creating it) and re-applies it when it is the active one.
 local function replaceProfile(name, data)
     raw.profiles[name] = normalizeProfile(N.DeepCopy(data))
+    bumpGeneration(name)
     if name == activeName then
         active = raw.profiles[name]
         reapply()

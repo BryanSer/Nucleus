@@ -306,14 +306,29 @@ function CC.SelectClass()
     cc.bindings = (type(own) == "table" and own) or cc.byClass[class]
 end
 
+-- A button is only rewritten when its bindings changed since the last pass.
+local appliedSig = setmetatable({}, { __mode = "k" })
+
+local function bindingsSig(bindings, snippet)
+    local t = { snippet }
+    for _, binding in ipairs(bindings or {}) do
+        local ta, tv, va, vv = attrPairs(binding)
+        if ta then t[#t + 1] = ta .. "=" .. tostring(tv) .. "," .. tostring(va) .. "=" .. tostring(vv) end
+    end
+    return table.concat(t, "\n")
+end
+
 function CC.ApplyToAll()
     if not N.db or not N.UnitFrame then return end
     N.RunWhenSafe(function()
         local bindings = N.db.clickCasting and N.db.clickCasting.bindings
         local snippet = wheelSnippet(bindings)
         wheelHandler:SetAttribute("wheelsnippet", snippet)
+        local sig = bindingsSig(bindings, snippet)
         N.UnitFrame.ForEachButton(function(b)
             local child = b._secure or b -- bindings live on the secure button
+            if appliedSig[child] == sig then return end
+            appliedSig[child] = sig
             CC.ClearAll(child)
             child:SetAttribute("*type1", "target")
             child:SetAttribute("*type2", "togglemenu")

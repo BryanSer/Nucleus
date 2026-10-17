@@ -2,6 +2,7 @@ local _, ns = ...
 local N = ns.N
 local M = N.Media
 local L = N.L
+local UnitExists, UnitIsUnit, UnitIsConnected, UnitIsDeadOrGhost = UnitExists, UnitIsUnit, UnitIsConnected, UnitIsDeadOrGhost
 
 -- Unit frame visual layer shared by the group frames (real units) and test mode (mock data).
 
@@ -237,6 +238,25 @@ local function styleText(fs, o, dim)
     fs:SetTextColor(c[1], c[2], c[3])
 end
 
+-- The bundled font has no Chinese, Japanese or Korean glyphs: such a name gets a Blizzard font that has them.
+local function glyphFont(text)
+    if type(text) ~= "string" or N.IsSecret(text) then return false end
+    if text:find("[\234-\237]") then return "Fonts/2002.TTF" end
+    if text:find("[\227-\233]") then return "Fonts/ARKai_T.ttf" end
+    return false
+end
+
+local function setNameFont(b, o, text)
+    local gf = glyphFont(text)
+    if gf == b._nameGlyph then return end
+    b._nameGlyph = gf
+    local fs = b.nameText
+    if not (gf and fs:SetFont(gf, o.size or 11, UF.Outline(o))) then
+        b._nameGlyph = false
+        fs:SetFont(M.font, o.size or 11, UF.Outline(o))
+    end
+end
+
 -- 9-point text placement inside the health bar: { point, justifyH, justifyV,
 -- inset x, inset y }. "center" has no inset; the edge spots keep 2px off the border.
 local ANCHORS = {
@@ -408,6 +428,8 @@ function UF.LayoutBars(b)
     local textW = N.db[b.groupKey].width - 6
     local name, hp = ind.name, ind.healthText
     styleText(b.nameText, name)
+    b._nameGlyph = nil
+    setNameFont(b, name, b.nameText:GetText())
     styleText(b.hpText, hp)
     b.nameText:SetWidth(textW)
     b.hpText:SetWidth(textW)
@@ -782,6 +804,7 @@ local function render(b)
             shown = limitChars(shown, maxChars)
         end
         b.nameText:SetText(shown)
+        setNameFont(b, ind.name, shown)
         if (not b.connected) or b.dead then
             b.nameText:SetTextColor(M.color.textDim[1], M.color.textDim[2], M.color.textDim[3])
         else
@@ -940,10 +963,7 @@ local function healthFadeCurve(threshold, dim)
     return fadeCurve
 end
 
-local function onUpdate(b, elapsed)
-    b.rangeElapsed = (b.rangeElapsed or 0) + elapsed
-    if b.rangeElapsed < N.db.core.rangeUpdateInterval then return end
-    b.rangeElapsed = 0
+local function updateRange(b)
     if not b.unit or not UnitExists(b.unit) then return end
 
     local appearance = N.db[b.groupKey].appearance
@@ -997,6 +1017,29 @@ local function onUpdate(b, elapsed)
     b:SetAlpha(alpha)
 end
 
+-- Range: UNIT_IN_RANGE_UPDATE names the unit that changed; one slow shared timer covers what the event does not
+-- (health fade, dead units, pets, frames that just appeared).
+local rangeFrame = CreateFrame("Frame")
+rangeFrame:RegisterEvent("UNIT_IN_RANGE_UPDATE")
+rangeFrame:SetScript("OnEvent", function(_, _, unit)
+    local set = unit and UF.ButtonsOfUnit(unit)
+    if not set then return end
+    for b in pairs(set) do
+        if b:IsShown() then updateRange(b) end
+    end
+end)
+local rangeElapsed = 0
+rangeFrame:SetScript("OnUpdate", function(_, dt)
+    rangeElapsed = rangeElapsed + dt
+    if rangeElapsed < math.max(N.db.core.rangeUpdateInterval or 0.5, 0.5) then return end
+    rangeElapsed = 0
+    local all = UF.AllButtons()
+    for n = 1, #all do
+        local b = all[n]
+        if b:IsShown() then updateRange(b) end
+    end
+end)
+
 -- The header runs these two handlers inside its own (secure) update. Our reaction is queued and
 -- done a moment later, so none of our code runs inside that update.
 local pendingBind, bindScheduled = {}, false
@@ -1005,7 +1048,7 @@ local function flushBinds()
     for b, w in pairs(pendingBind) do
         pendingBind[b] = nil
         if w.bind then bindUnit(b) end
-        if w.full and b:IsShown() then fullUpdate(b) end
+        if w.full and b:IsShown() then fullUpdate(b); updateRange(b) end
     end
 end
 local function queueBind(b, what)
@@ -1092,7 +1135,6 @@ function N.StyleUnitButton(name)
         for i = 1, #b.hoverEdges do b.hoverEdges[i]:Hide() end
     end)
     b:SetScript("OnEvent", onEvent)
-    b:SetScript("OnUpdate", onUpdate)
 
     bindUnit(b)
 end

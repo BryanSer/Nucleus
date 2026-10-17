@@ -623,6 +623,12 @@ local function initButton(h, group)
                     bindTime(button, fs, spec)
                     sz.time = fs
                 end
+                local ig = spec.iconGlow
+                if ig then
+                    local gl = E.NewGlow(button, button)
+                    gl:Show(ig.style or "pixel", ig.color[1], ig.color[2], ig.color[3], ig.offset or 0, ig.thickness or 2, ig.speed or 0.15, ig.length or 6)
+                    sz.glow = gl
+                end
             end
         end
         restyle(button, spec)
@@ -788,6 +794,11 @@ local function signature(spec)
         parts[#parts + 1] = ("g%s|%s|%s|%s|%s|%s|%s|%s"):format(tostring(spec.glow), tostring(c[1]), tostring(c[2]),
             tostring(c[3]), tostring(spec.offset), tostring(spec.thickness), tostring(spec.speed), tostring(spec.length))
     end
+    local ig = spec.iconGlow
+    if ig then
+        parts[#parts + 1] = ("ig%s|%s|%s|%s|%s|%s|%s|%s"):format(tostring(ig.style), tostring(ig.color[1]), tostring(ig.color[2]),
+            tostring(ig.color[3]), tostring(ig.speed), tostring(ig.length), tostring(ig.thickness), tostring(ig.offset))
+    end
     local tc = spec.timeColor
     if tc and tc.enabled then
         parts[#parts + 1] = ("tc%s|%s|%s|%s"):format(tostring(tc.seconds), tostring(tc.color and tc.color[1]),
@@ -863,8 +874,30 @@ local function removeOne(button, id)
     h.parks[sig] = c
     h.sig = nil
 end
-local function applyOne(button, id, spec)
-    if not spec then removeOne(button, id) return end
+local applyOne
+local function settle(button, id, h, spec)
+    h.settleSpec = spec
+    if h.settling then return end
+    h.settling = true
+    C_Timer.After(0.35, function()
+        h.settling = false
+        local s = h.settleSpec
+        h.settleSpec = nil
+        if s and h.spec == s then
+            h.settleNow = true
+            applyOne(button, id, s)
+            h.settleNow = nil
+        end
+    end)
+end
+
+function applyOne(button, id, spec)
+    if not spec then
+        local gone = state[button] and state[button][id]
+        if gone then gone.settleSpec = nil end
+        removeOne(button, id)
+        return
+    end
     local h = handleOf(button, id)
     h.spec = spec
     h.parent = button.overlay or button
@@ -880,6 +913,11 @@ local function applyOne(button, id, spec)
         -- Structural change: wait for the end of combat (a container cannot be made now).
         N.RunWhenSafe(function() E.Apply(button, id, h.spec) end, "auraengine-" .. tostring(button) .. id)
         if h.container then h.container:Show() end
+        return
+    end
+    -- A slider drag changes the look many times a second: only the last value builds a container.
+    if h.container and not h.settleNow and not (h.parks and h.parks[sig]) then
+        settle(button, id, h, spec)
         return
     end
     if h.container then

@@ -38,6 +38,7 @@ function N.StyleMover(a, label, text, target)
 end
 
 function N.MoverWanted(key)
+    if N.IsHosted and N.IsHosted(key) then return false end
     local mode = N.db and N.db.editMode or "party"
     if N.PET_KEYS[key] then return N.PET_KEYS[mode] == true end
     return key == mode

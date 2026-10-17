@@ -554,7 +554,7 @@ local function apply(icon, d, cfg, row, unit)
     icon.tex:SetTexture(d.icon)
 
     -- Cooldown: plain numbers when readable, the duration object when hidden; the cooldown frame draws the text.
-    local style = cfg.cdStyle or "spiral"
+    local style = N.CooldownStyle(icon._gk, cfg.cdStyle)
     local wantAnim, wantTime = cfg.showCooldown, cfg.showTime
     local active = false
     local mask = icon.mask
@@ -918,7 +918,7 @@ function A.Update(b)
             for i = 1, cfg.max do
                 local ic = pool[i]
                 if ic then
-                    if iconsOn and list[i] then apply(ic, list[i], cfg, row, b.unit) else ic:Hide() end
+                    if iconsOn and list[i] then ic._gk = b.groupKey; apply(ic, list[i], cfg, row, b.unit) else ic:Hide() end
                 end
             end
             if row.kind == "dispel" then updateFX(b, cfg, list, b.unit) end

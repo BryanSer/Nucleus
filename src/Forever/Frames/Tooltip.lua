@@ -9,7 +9,7 @@ N.Tooltip = TT
 
 local function shouldShow()
     if not N.db.tooltip.enabled then return false end
-    if N.db.tooltip.hideInCombat and InCombatLockdown() then return false end
+    if N.db.tooltip.hideInCombat and N.InCombat() then return false end
     return true
 end
 

@@ -199,8 +199,7 @@ local function ensurePingCVar()
     end
 end
 
--- The hooks are cheap and harmless to leave installed regardless of the toggle (onBlizzardShowPing
--- checks N.db.ping.enabled first), so enabling the setting later needs no lazy init.
+-- The hooks stay installed; onBlizzardShowPing checks N.db.ping.enabled first.
 function Ping.Init()
     installSetupHooks()
     sweepBlizzardFrames()

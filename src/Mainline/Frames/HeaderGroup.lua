@@ -11,6 +11,33 @@ N.HeaderGroup = HG
 -- header itself is forbidden in combat (it is protected); moving this frame is not.
 local posFrames = {}
 function N.HeaderPosFrame(key) return posFrames[key] end
+
+-- Own pet, group pets and Spotlight can hang on the party / raid frames ("Attach to group frames").
+local HOSTED = { ownPet = true, groupPets = true, spotlight = true }
+local HOST_SIDES = {
+    RIGHT = { "TOPLEFT", "TOPRIGHT" }, LEFT = { "TOPRIGHT", "TOPLEFT" },
+    TOP = { "BOTTOMLEFT", "TOPLEFT" }, BOTTOM = { "TOPLEFT", "BOTTOMLEFT" },
+}
+
+local function hostFor(key, cfg)
+    if not (HOSTED[key] and cfg and cfg.hostEnabled) then return nil end
+    if key ~= "spotlight" and cfg.attachEnabled then return nil end -- hanging on the owner wins
+    return (IsInRaid() and N.headers.raid) or N.headers.party or N.headers.raid
+end
+
+local function hostPoints(cfg)
+    local side = HOST_SIDES[cfg.hostSide] and cfg.hostSide or "RIGHT"
+    local gap, shift = cfg.hostGap or 4, cfg.hostShift or 0
+    local x, y = gap, shift
+    if side == "LEFT" then x, y = -gap, shift
+    elseif side == "TOP" then x, y = shift, gap
+    elseif side == "BOTTOM" then x, y = shift, -gap end
+    return HOST_SIDES[side][1], HOST_SIDES[side][2], x, y
+end
+
+function N.IsHosted(key)
+    return hostFor(key, N.db and N.db[key]) ~= nil
+end
 local function placeHeader(header, key, cfg, group)
     local pf = posFrames[key]
     if not pf then
@@ -20,8 +47,15 @@ local function placeHeader(header, key, cfg, group)
         posFrames[key] = pf
     end
     pf:ClearAllPoints()
-    pf:SetPoint(cfg.point, UIParent, cfg.point, cfg.x, cfg.y)
     header:ClearAllPoints()
+    local host = hostFor(key, cfg)
+    if host then
+        local selfPt, hostPt, x, y = hostPoints(cfg)
+        pf:SetPoint(selfPt, host, hostPt, x, y)
+        header:SetPoint(selfPt, pf, selfPt, 0, 0)
+        return
+    end
+    pf:SetPoint(cfg.point, UIParent, cfg.point, cfg.x, cfg.y)
     local corner, ox, oy = cfg.point, 0, 0
     local grid = N.RaidGrid
     if key == "raid" and grid and grid.Active() then corner, ox, oy = grid.Anchor(group or 1) end
@@ -527,6 +561,7 @@ local function configurePetContainer(container)
     end
     container:ClearAllPoints()
     local host = key == "npc" and cfg.attachEnabled and ((IsInRaid() and N.headers.raid) or N.headers.party or N.headers.raid)
+    local hosted = not host and hostFor(key, cfg)
     if host then
         local s = SIDES[cfg.attachSide] or SIDES.RIGHT
         local gap, shift = cfg.attachGap or 2, cfg.attachShift or 0
@@ -535,6 +570,9 @@ local function configurePetContainer(container)
         elseif cfg.attachSide == "TOP" then x, y = shift, gap
         elseif cfg.attachSide == "BOTTOM" then x, y = shift, -gap end
         container:SetPoint(s[1], host, s[2], x, y)
+    elseif hosted then
+        local selfPt, hostPt, x, y = hostPoints(cfg)
+        container:SetPoint(selfPt, hosted, hostPt, x, y)
     else
         container:SetPoint(cfg.point, UIParent, cfg.point, cfg.x, cfg.y)
     end
@@ -715,8 +753,22 @@ syncGroupHeaders = function()
     end
 end
 
+-- Party and raid frames swap places when a group turns into a raid: hosted frames follow.
+local hostedWas = {}
+local function refreshHosted()
+    for key in pairs(HOSTED) do
+        local header = N.headers[key]
+        local host = hostFor(key, N.db[key])
+        if header and host ~= hostedWas[key] then
+            hostedWas[key] = host
+            configure(header)
+        end
+    end
+end
+
 function HG.RefreshAttach()
     N.RunWhenSafe(function()
+        refreshHosted()
         if N.db.groupPets.enabled and N.db.groupPets.attachEnabled and N.headers.groupPetsAttached then
             layoutAttachedPets(N.headers.groupPetsAttached)
         end
@@ -843,10 +895,14 @@ function HG.Init()
     rosterFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
     rosterFrame:RegisterEvent("PLAYER_REGEN_ENABLED")
     local lastFilter
-    rosterFrame:SetScript("OnEvent", function()
+    local rosterDirtyInCombat = false
+    rosterFrame:SetScript("OnEvent", function(_, event)
         -- Restyling touches the secure children: not while the game may be rearranging them in
-        -- combat (PLAYER_REGEN_ENABLED brings the pass back right after).
-        if not InCombatLockdown() then
+        -- combat. After combat it only runs again if the roster changed meanwhile.
+        if InCombatLockdown() then
+            if event == "GROUP_ROSTER_UPDATE" then rosterDirtyInCombat = true end
+        elseif event ~= "PLAYER_REGEN_ENABLED" or rosterDirtyInCombat then
+            rosterDirtyInCombat = false
             for _, header in pairs(N.headers) do
                 styleChildren(header)
             end

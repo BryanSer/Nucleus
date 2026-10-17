@@ -2,8 +2,7 @@ local _, ns = ...
 local N = ns.N
 local M = N.Media
 
--- Flat-skin primitives shared by frames and the options window: a 1px hard border, a matte fill
--- and a faint inner top highlight. No rounded corners, gradients or drop shadows.
+-- Skin primitives shared by frames and the options window: 1px border and flat fill.
 
 local function unpackColor(c)
     return c[1], c[2], c[3], c[4] or 1
@@ -170,8 +169,7 @@ function N.SetPanelBorder(frame, color)
     end
 end
 
--- Turns a StatusBar into a flat bar with a dark loss region behind it and a 1px top highlight
--- across the full width, so the bar reads as one surface regardless of its value.
+-- Turns a StatusBar into a flat bar with a dark loss region behind it and a 1px top highlight.
 function N.SkinBar(bar)
     bar:SetStatusBarTexture(M.flat)
     if not bar._nucLoss then

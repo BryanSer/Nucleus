@@ -2,6 +2,8 @@ local _, ns = ...
 local N = ns.N
 local M = N.Media
 local L = N.L
+local UnitExists, UnitIsUnit, UnitIsConnected, UnitIsDeadOrGhost = UnitExists, UnitIsUnit, UnitIsConnected, UnitIsDeadOrGhost
+local InCombatLockdown, IsInRaid = InCombatLockdown, IsInRaid
 local IsSecret = N.IsSecret
 
 local Abbrev = _G.AbbreviateNumbers or function(v)
@@ -113,6 +115,15 @@ local function dispatch(event, unit)
                 for i = 1, #defs do runUpdate(b, defs[i]) end
             end
         end
+    elseif event == "PLAYER_REGEN_ENABLED" then
+        -- Combat is over: repaint the frames within a time budget instead of all in one frame.
+        local all, snap = UF.AllButtons(), {}
+        for n = 1, #all do snap[n] = all[n] end
+        N.RunSliced(snap, function(b)
+            if b:IsShown() then
+                for i = 1, #defs do runUpdate(b, defs[i]) end
+            end
+        end, 5)
     else
         local all = UF.AllButtons()
         for n = 1, #all do
@@ -246,7 +257,7 @@ Indicators.Register("role", {
             or (role == "DAMAGER" and o.showDamager == false) then
             icon:Hide(); return
         end
-        if o.hideInCombat and not b._mock and InCombatLockdown() then icon:Hide(); return end
+        if o.hideInCombat and not b._mock and N.InCombat() then icon:Hide(); return end
 
         local round = (o.shape == "circle")
         local set = round and ROLE_TC_CIRCLE or (o.shape == "square2" and ROLE_TC_SQUARE2 or ROLE_TC_SQUARE)

@@ -40,23 +40,56 @@ function N.PruneStale(tbl, defaults)
     end
 end
 
--- Queue for work that is not allowed in combat (layout, secure attributes). Runs on
--- PLAYER_REGEN_ENABLED.
+-- Runs list[i] through step(item) within a time budget per frame; what is left continues on the next frame.
+function N.RunSliced(list, step, budgetMs)
+    local i, n = 1, #list
+    local function pass()
+        local deadline = debugprofilestop() + (budgetMs or 6)
+        while i <= n do
+            step(list[i], i)
+            i = i + 1
+            if i <= n and debugprofilestop() > deadline then
+                C_Timer.After(0, pass)
+                return
+            end
+        end
+    end
+    pass()
+end
+
+-- Queue for work that is not allowed in combat (layout, secure attributes). Runs after PLAYER_REGEN_ENABLED,
+-- in order, a few milliseconds per frame.
 local queue = {}
+local flushing = false
 local queueFrame = CreateFrame("Frame")
+
+local function flush()
+    flushing = true
+    local deadline = debugprofilestop() + 6
+    while #queue > 0 do
+        if InCombatLockdown() then
+            flushing = false
+            return
+        end
+        local item = table.remove(queue, 1)
+        local ok, err = pcall(item.fn)
+        if not ok then geterrorhandler()(err) end
+        if #queue > 0 and debugprofilestop() > deadline then
+            C_Timer.After(0, flush)
+            return
+        end
+    end
+    flushing = false
+end
+
 N.SafeRegister(queueFrame, "PLAYER_REGEN_ENABLED")
 queueFrame:SetScript("OnEvent", function()
-    local run = queue
-    queue = {}
-    for i = 1, #run do
-        local ok, err = pcall(run[i].fn)
-        if not ok then geterrorhandler()(err) end
-    end
+    if #queue > 0 and not flushing then flush() end
 end)
 
 -- Runs fn now, or after combat. A key replaces an earlier deferral of the same action.
 function N.RunWhenSafe(fn, key)
-    if not InCombatLockdown() then
+    if not InCombatLockdown() and #queue == 0 then
         fn()
         return
     end
@@ -69,6 +102,31 @@ function N.RunWhenSafe(fn, key)
         end
     end
     queue[#queue + 1] = { fn = fn, key = key }
+    if not InCombatLockdown() and not flushing then flush() end
+end
+
+-- Own combat flag from PLAYER_REGEN_DISABLED/ENABLED; InCombatLockdown() lags behind the event on the way in.
+local playerInCombat = false
+local combatFlag = CreateFrame("Frame")
+combatFlag:RegisterEvent("PLAYER_REGEN_DISABLED")
+combatFlag:RegisterEvent("PLAYER_REGEN_ENABLED")
+combatFlag:RegisterEvent("PLAYER_ENTERING_WORLD")
+combatFlag:SetScript("OnEvent", function(_, event)
+    if event == "PLAYER_ENTERING_WORLD" then
+        playerInCombat = InCombatLockdown() and true or false
+    else
+        playerInCombat = (event == "PLAYER_REGEN_DISABLED")
+    end
+end)
+
+function N.InCombat() return playerInCombat end
+
+-- Cooldown animation style of an aura row or custom indicator: the global Appearance setting wins when it is on.
+function N.CooldownStyle(groupKey, own)
+    local g = groupKey and N.db[groupKey]
+    local a = g and g.appearance
+    if a and a.cdStyleMode == "global" then return a.cdStyleGlobal or "spiral" end
+    return own or "spiral"
 end
 
 function N.Round(v)

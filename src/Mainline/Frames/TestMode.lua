@@ -403,7 +403,11 @@ local function rebuild()
                 buildKey("party", true)
                 if containers.party then containers.party:Show() end
             end
-            local hostKey = (key == "npc" and N.db.npc.attachEnabled) and (edited == "raid" and "raid" or "party") or nil
+            local kc = N.db[key]
+            local hostKey = (key == "npc" and kc.attachEnabled) and (edited == "raid" and "raid" or "party") or nil
+            local hosted = (key == "ownPet" or key == "groupPets" or key == "spotlight") and kc.hostEnabled
+                and not (key ~= "spotlight" and kc.attachEnabled)
+            if hosted then hostKey = (edited == "raid") and "raid" or "party" end
             if hostKey then
                 buildKey(hostKey, true)
                 if containers[hostKey] then containers[hostKey]:Show() end
@@ -415,13 +419,14 @@ local function rebuild()
             end
             if attached and built then attachPreview(key) end
             if hostKey and built and containers[hostKey] then
-                local cfg = N.db.npc
-                local s = NPC_SIDES[cfg.attachSide] or NPC_SIDES.RIGHT
-                local gap, shift = cfg.attachGap or 2, cfg.attachShift or 0
+                local cfg = N.db[key]
+                local side, gap, shift = cfg.attachSide, cfg.attachGap or 2, cfg.attachShift or 0
+                if hosted then side, gap, shift = cfg.hostSide, cfg.hostGap or 4, cfg.hostShift or 0 end
+                local s = NPC_SIDES[side] or NPC_SIDES.RIGHT
                 local x, y = gap, shift
-                if cfg.attachSide == "LEFT" then x, y = -gap, shift
-                elseif cfg.attachSide == "TOP" then x, y = shift, gap
-                elseif cfg.attachSide == "BOTTOM" then x, y = shift, -gap end
+                if side == "LEFT" then x, y = -gap, shift
+                elseif side == "TOP" then x, y = shift, gap
+                elseif side == "BOTTOM" then x, y = shift, -gap end
                 containers[key]:ClearAllPoints()
                 containers[key]:SetPoint(s[1], containers[hostKey], s[2], x, y)
             end

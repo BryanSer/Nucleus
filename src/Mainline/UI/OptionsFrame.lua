@@ -25,7 +25,6 @@ for _, spec in ipairs({ { "MakeCheckbox" }, { "MakeSlider" }, { "MakeDropdown" }
     end
 end
 
--- A skinned text button for one-off actions.
 local function ActionButton(parent, label, onClick)
     local b = CreateFrame("Button", nil, parent)
     b._rowHeight = 28
@@ -45,7 +44,6 @@ local MODEBAR = 44
 local RAIL_W  = 200
 local WIN_W   = 700
 local WIN_H   = 660
--- Content width: rail tabs (list + content) vs flow tabs (sections stacked full width).
 local RAIL_CW = WIN_W - RAIL_W - 30
 local FLOW_CW = WIN_W - 32
 local CONTENT_W = FLOW_CW
@@ -163,7 +161,6 @@ local function BuildGeneralOverview(p, key)
     if not (N.PET_KEYS[key] or key == "spotlight") then p:AddCard(frames) end
 end
 
--- Addon-wide settings, the same whatever group is edited.
 local function BuildInterface(p)
     local ui = N.MakeCard(p, L["Interface"])
     ui:AddRow(N.MakeCheckbox(ui, L["Minimap button"],
@@ -611,6 +608,30 @@ local function BuildLayout(p, key)
         size:SetHeight(-size._y + upc:GetHeight() + N.CARD_PAD)
     end
     p:AddCard(size)
+
+    local ca = N.MakeCard(p, L["CDANIM_title"])
+    ca:AddRow(N.MakeDropdown(ca, L["CDANIM_mode"], {
+        { value = "row", text = L["CDANIM_row"] },
+        { value = "global", text = L["CDANIM_global"] },
+    }, function() return N.db[key].appearance.cdStyleMode or "row" end,
+       function(v)
+           N:Set(key .. ".appearance.cdStyleMode", v)
+           N.OptionsDropPanels("indicators/")
+       end))
+    ca:AddRow(N.MakeDropdown(ca, L["Animation style"], {
+        { value = "vertical", text = L["Top to bottom"] },
+        { value = "spiral", text = L["Spiral"] },
+    }, function() return N.db[key].appearance.cdStyleGlobal or "spiral" end,
+       function(v) N:Set(key .. ".appearance.cdStyleGlobal", v) end))
+    local ch = N.FontString(ca, 11)
+    ch:SetPoint("TOPLEFT", ca, "TOPLEFT", N.CARD_PAD, ca._y)
+    ch:SetWidth(ca:GetWidth() - 2 * N.CARD_PAD)
+    ch:SetJustifyH("LEFT")
+    ch:SetTextColor(uc(M.color.textDim))
+    ch:SetText(L["CDANIM_hint"])
+    ch:SetHeight(ch:GetStringHeight() + 4)
+    ca:SetHeight(-ca._y + ch:GetHeight() + N.CARD_PAD)
+    p:AddCard(ca)
 end
 
 local function BuildFramePosition(p, key)
@@ -751,6 +772,45 @@ local function BuildFramePosition(p, key)
         ah:SetHeight(ah:GetStringHeight() + 4)
         at:SetHeight(-at._y + ah:GetHeight() + N.CARD_PAD)
         p:AddCard(at)
+    end
+
+    if key == "ownPet" or key == "groupPets" or key == "spotlight" then
+        local hc = N.MakeCard(p, L["Attach to group frames"])
+        hc:AddRow(N.MakeCheckbox(hc, L["Attach to the group frames"],
+            function() return N.db[key].hostEnabled end,
+            function(v) N:Set(key .. ".hostEnabled", v) end))
+        local gapSlider, shiftSlider
+        local function relabelHost()
+            local side = N.db[key].hostSide
+            local sideways = (side == "LEFT" or side == "RIGHT")
+            if gapSlider then gapSlider.label:SetText(sideways and L["X offset"] or L["Y offset"]) end
+            if shiftSlider then shiftSlider.label:SetText(sideways and L["Y offset"] or L["X offset"]) end
+        end
+        hc:AddRow(N.MakeDropdown(hc, L["Side of the group frames"], {
+            { value = "RIGHT", text = L["Right"] },
+            { value = "LEFT", text = L["Left"] },
+            { value = "TOP", text = L["Up"] },
+            { value = "BOTTOM", text = L["Down"] },
+        }, function() return N.db[key].hostSide end,
+           function(v) N:Set(key .. ".hostSide", v); relabelHost() end))
+        gapSlider = N.MakeSlider(hc, L["X offset"], -10, 60, 1,
+            function() return N.db[key].hostGap end,
+            function(v) N:Set(key .. ".hostGap", N.Round(v)) end)
+        hc:AddRow(gapSlider)
+        shiftSlider = N.MakeSlider(hc, L["Y offset"], -60, 60, 1,
+            function() return N.db[key].hostShift end,
+            function(v) N:Set(key .. ".hostShift", N.Round(v)) end)
+        hc:AddRow(shiftSlider)
+        relabelHost()
+        local hh = N.FontString(hc, 11)
+        hh:SetPoint("TOPLEFT", hc, "TOPLEFT", N.CARD_PAD, hc._y)
+        hh:SetWidth(hc:GetWidth() - 2 * N.CARD_PAD)
+        hh:SetJustifyH("LEFT")
+        hh:SetTextColor(uc(M.color.textDim))
+        hh:SetText(key == "spotlight" and L["HOST_HINT"] or L["HOST_HINT_PET"])
+        hh:SetHeight(hh:GetStringHeight() + 4)
+        hc:SetHeight(-hc._y + hh:GetHeight() + N.CARD_PAD)
+        p:AddCard(hc)
     end
 
     if key == "party" or key == "raid" then
@@ -1692,10 +1752,12 @@ local function BuildAuras(p, key, kind)
     local tc = N.MakeCard(p, L["Time"])
     tc:AddRow(N.MakeCheckbox(tc, L["Show cooldown animation"],
         function() return o.showCooldown end, function(v) N:Set(pth("showCooldown"), v) end))
-    tc:AddRow(N.MakeDropdown(tc, L["Animation style"], {
-        { value = "vertical", text = L["Top to bottom"] },
-        { value = "spiral", text = L["Spiral"] },
-    }, function() return o.cdStyle or "spiral" end, function(v) N:Set(pth("cdStyle"), v) end))
+    if N.db[key].appearance.cdStyleMode ~= "global" then
+        tc:AddRow(N.MakeDropdown(tc, L["Animation style"], {
+            { value = "vertical", text = L["Top to bottom"] },
+            { value = "spiral", text = L["Spiral"] },
+        }, function() return o.cdStyle or "spiral" end, function(v) N:Set(pth("cdStyle"), v) end))
+    end
     tc:AddRow(N.MakeCheckbox(tc, L["Show time on icon"],
         function() return o.showTime end, function(v) N:Set(pth("showTime"), v) end))
     tc:AddRow(N.MakeSlider(tc, L["Size"], 6, 24, 1,
@@ -1724,6 +1786,31 @@ local function BuildAuras(p, key, kind)
     sc:AddRow(N.MakeSlider(sc, L["Y offset"], -30, 30, 1,
         function() return o.stackY end, function(v) N:Set(pth("stackY"), N.Round(v)) end))
     p:AddCard(sc)
+
+    if N.AuraEngine and N.AuraEngine.Supported and N.AuraEngine.Supported() and o.glow then
+        local gc = N.MakeCard(p, L["ROWGLOW_title"])
+        gc:AddRow(N.MakeDropdown(gc, L["ROWGLOW_mode"], {
+            { value = "off", text = L["ROWGLOW_off"] },
+            { value = "icon", text = L["ROWGLOW_icon"] },
+            { value = "frame", text = L["ROWGLOW_frame"] },
+        }, function() return o.glow or "off" end, function(v) N:Set(pth("glow"), v) end))
+        gc:AddRow(N.MakeDropdown(gc, L["ROWGLOW_style"], {
+            { value = "pixel", text = L["GLOW_pixel"] },
+            { value = "halo", text = L["GLOW_halo"] },
+            { value = "pulse", text = L["GLOW_pulse"] },
+        }, function() return o.glowStyle or "pixel" end, function(v) N:Set(pth("glowStyle"), v) end))
+        gc:AddRow(N.MakeColorPicker(gc, L["Color"],
+            function() return o.glowColor or { 1, 0.85, 0.2 } end, function(v) N:Set(pth("glowColor"), v) end))
+        gc:AddRow(N.MakeSlider(gc, L["Line length"], 2, 30, 1,
+            function() return o.glowLength or 6 end, function(v) N:Set(pth("glowLength"), N.Round(v)) end))
+        gc:AddRow(N.MakeSlider(gc, L["Thickness"], 1, 8, 1,
+            function() return o.glowThickness or 2 end, function(v) N:Set(pth("glowThickness"), N.Round(v)) end))
+        gc:AddRow(N.MakeSlider(gc, L["Speed"], 0.05, 1.5, 0.05,
+            function() return o.glowSpeed or 0.15 end, function(v) N:Set(pth("glowSpeed"), v) end))
+        gc:AddRow(N.MakeSlider(gc, L["Distance"], -6, 12, 1,
+            function() return o.glowOffset or 0 end, function(v) N:Set(pth("glowOffset"), N.Round(v)) end))
+        p:AddCard(gc)
+    end
 
     -- Cooldown rows: the list decides when the game shows the spell ID, otherwise Blizzard's classification (if on).
     if kind == "defensives" or kind == "externals" or kind == "defext" or kind == "offensives" or kind == "buffs" then
@@ -1905,6 +1992,17 @@ local function BuildAuras(p, key, kind)
             layoutGrid()
         end)
         lc:AddRow(addBox)
+        local function setShown(value)
+            for _, id in ipairs(items) do
+                local cls = N.SpellClass and N.SpellClass[id] or "GENERAL"
+                local hide = kind == "buffs" and not o.pickAll and cls ~= "GENERAL" and cls ~= select(2, UnitClass("player"))
+                if not hide then on[id] = value or nil end
+            end
+            save()
+            layoutGrid()
+        end
+        lc:AddRow(ActionButton(lc, L["Select all"], function() setShown(true) end))
+        lc:AddRow(ActionButton(lc, L["Select none"], function() setShown(false) end))
         lc:AddRow(ActionButton(lc, L["Reset to default list"], function()
             N:Set(pth("list"), N.Defaults.party.auras[kind].list)
             items, known = {}, {}
@@ -2552,10 +2650,12 @@ local function BuildCustom(p, mode, id)
         if kind == "icon" or kind == "icons" or kind == "rect" then
             local tc = N.MakeCard(p, L["Time"])
             checkbox(tc, L["Show cooldown animation"], "showCooldown")
-            tc:AddRow(N.MakeDropdown(tc, L["Animation style"], {
-                { value = "vertical", text = L["Top to bottom"] },
-                { value = "spiral", text = L["Spiral"] },
-            }, function() return entry.cdStyle or "spiral" end, function(v) set("cdStyle", v) end))
+            if N.db[mode].appearance.cdStyleMode ~= "global" then
+                tc:AddRow(N.MakeDropdown(tc, L["Animation style"], {
+                    { value = "vertical", text = L["Top to bottom"] },
+                    { value = "spiral", text = L["Spiral"] },
+                }, function() return entry.cdStyle or "spiral" end, function(v) set("cdStyle", v) end))
+            end
             checkbox(tc, L["Show time on icon"], "showTime")
             slider(tc, L["Size"], "timeSize", 6, 24)
             tc:AddRow(N.MakeDropdown(tc, L["Anchor point"], textAnchors(),
@@ -3151,21 +3251,37 @@ end
 
 local function BuildChangelog(p)
     local c = N.MakeCard(p, L["Changelog"])
-    local lines = {}
-    for _, entry in ipairs(N.Changelog) do
-        lines[#lines + 1] = string.format("|cff61aef7%s|r  |cff8a8a8a%s|r", entry.version, entry.date)
-        for _, note in ipairs(entry.notes) do
-            lines[#lines + 1] = "   \194\183 " .. note
-        end
-        lines[#lines + 1] = ""
+    local HEAD_COLOR = { New = "ff7bd88f", Performance = "ffe6b450", Fixes = "ffe06c75" }
+    local width = c:GetWidth() - 2 * N.CARD_PAD
+    local y = -N.CARD_TOP
+    local function add(size, text, gap)
+        y = y - (gap or 0)
+        local fs = N.FontString(c, size)
+        fs:SetPoint("TOPLEFT", N.CARD_PAD, y)
+        fs:SetWidth(width)
+        fs:SetJustifyH("LEFT")
+        fs:SetSpacing(3)
+        fs:SetText(text)
+        y = y - fs:GetStringHeight()
     end
-    local text = N.FontString(c, 12)
-    text:SetPoint("TOPLEFT", N.CARD_PAD, -N.CARD_TOP)
-    text:SetWidth(c:GetWidth() - 2 * N.CARD_PAD)
-    text:SetJustifyH("LEFT")
-    text:SetSpacing(3)
-    text:SetText(table.concat(lines, "\n"))
-    c:SetHeight(N.CARD_TOP + text:GetStringHeight() + N.CARD_PAD)
+    for _, entry in ipairs(N.Changelog) do
+        add(15, string.format("|cff61aef7%s|r  |cff8a8a8a%s|r", entry.version, entry.date), 10)
+        local bullets = {}
+        local function flush()
+            if #bullets > 0 then add(12, table.concat(bullets, "\n"), 3); bullets = {} end
+        end
+        for _, note in ipairs(entry.notes) do
+            if note:sub(1, 3) == "## " then
+                flush()
+                local name = note:sub(4)
+                add(14, "|c" .. (HEAD_COLOR[name] or "ffc8cdd6") .. name .. "|r", 8)
+            else
+                bullets[#bullets + 1] = "   \194\183 " .. note
+            end
+        end
+        flush()
+    end
+    c:SetHeight(-y + N.CARD_PAD)
     p:AddCard(c)
 end
 
@@ -3292,6 +3408,12 @@ local function BuildSpotlight(p)
     ac:AddRow(ActionButton(ac, "+  " .. L["SP_tanks"], function() add({ type = "role", value = "TANK" }) end))
     ac:AddRow(ActionButton(ac, "+  " .. L["SP_healers"], function() add({ type = "role", value = "HEALER" }) end))
     ac:AddRow(ActionButton(ac, "+  " .. L["SP_target"], function() add({ type = "target" }) end))
+    ac:AddRow(ActionButton(ac, "+  " .. L["SP_target_name"], function()
+        local name, realm = UnitName("target")
+        if not name or N.IsSecret(name) then return end
+        if realm and realm ~= "" then name = name .. "-" .. realm end
+        add({ type = "name", value = name })
+    end))
     ac:AddRow(ActionButton(ac, "+  " .. L["SP_targettarget"], function() add({ type = "targettarget" }) end))
     ac:AddRow(ActionButton(ac, "+  " .. L["SP_focus"], function() add({ type = "focus" }) end))
     ac:AddRow(N.MakeTextInput(ac, L["SP_name_add"],
@@ -3344,7 +3466,6 @@ local function BuildTabModel()
               build = function(p)
                   p:AddSection(L["SECTION_ALL_PROFILES"])
                   BuildInterface(p)
-                  BuildPosition(p)
                   BuildProfileScope(p)
               end },
             { id = "overview", label = L["Overview"], perMode = true,
@@ -3365,6 +3486,7 @@ local function BuildTabModel()
         { id = "position", label = L["Position"], flow = true, subs = {
             { id = "position", label = L["Position"], perMode = true,
               build = function(p, mode) BuildFramePosition(p, mode) end },
+            { id = "handles", label = L["Move handles"], build = function(p) BuildPosition(p) end },
         } },
         { id = "indicators", label = L["Indicators"], subs = indicatorSubs },
         { id = "clickcasting", label = L["Click-Casting"], flow = "single", subs = {
@@ -3439,7 +3561,18 @@ local function HasSub(tab, id)
     for _, s in ipairs(tab.subs) do if s.id == id and not s.action then return true end end
 end
 
+-- Frames are never freed, so built pages are kept per profile (cacheStash) instead of being thrown away on
+-- every profile switch; a set is reused only while its profile's settings tables are the same.
+local cacheStash, cachedProfile, cachedGen = {}, nil, nil
+local function noteCacheOwner()
+    if not cachedProfile then
+        cachedProfile = N.Profiles.Current()
+        cachedGen = N.Profiles.Generation(cachedProfile)
+    end
+end
+
 local function GetPanel(tabId, sub)
+    noteCacheOwner()
     local key = tabId .. "/" .. sub.id .. (sub.perMode and ("/" .. N:Mode()) or "")
     local p = panelCache[key]
     if not p then
@@ -3456,6 +3589,7 @@ local function GetPanel(tabId, sub)
 end
 
 local function GetFlowPanel(tab)
+    noteCacheOwner()
     local perMode = false
     for _, s in ipairs(tab.subs) do if s.perMode then perMode = true break end end
     local key = tab.id .. "/flow" .. (perMode and ("/" .. N:Mode()) or "")
@@ -3735,10 +3869,20 @@ function N.OptionsResize(p)
     end
 end
 
--- A profile switch replaces every settings table, so cached panels are dropped and rebuilt on demand.
-N:On("NUCLEUS_PROFILE_CHANGED", function()
-    for key, p in pairs(panelCache) do
+local function disposePanels(panels)
+    for key, p in pairs(panels) do
         if not key:find("^profile/") then
+            if p.previewHost then p.previewHost:Hide(); p.previewHost:SetParent(nil) end
+            p:Hide()
+            p:SetParent(nil)
+        end
+    end
+end
+
+-- Drops the built pages whose cache key starts with prefix (they are rebuilt when visited again).
+function N.OptionsDropPanels(prefix)
+    for key, p in pairs(panelCache) do
+        if key:sub(1, #prefix) == prefix then
             if p.previewHost then p.previewHost:Hide(); p.previewHost:SetParent(nil) end
             p:Hide()
             p:SetParent(nil)
@@ -3746,9 +3890,50 @@ N:On("NUCLEUS_PROFILE_CHANGED", function()
         end
     end
     for key in pairs(searchIndex) do
-        if not key:find("^profile/") then searchIndex[key] = nil end
+        if key:sub(1, #prefix) == prefix then searchIndex[key] = nil end
     end
     indexedMode = nil
+end
+
+-- The pages hold the settings tables they were built from: another profile gets its own set, and a set whose
+-- tables were replaced (generation changed) is dropped and rebuilt on demand.
+N:On("NUCLEUS_PROFILE_CHANGED", function()
+    local P = N.Profiles
+    local cur = P.Current()
+    local gen = P.Generation(cur)
+    local sharedPanels, sharedIndex = {}, {}
+    for key, p in pairs(panelCache) do
+        if key:find("^profile/") then sharedPanels[key] = p end
+    end
+    for key, ctx in pairs(searchIndex) do
+        if key:find("^profile/") then sharedIndex[key] = ctx end
+    end
+    if cachedProfile and cachedProfile ~= cur then
+        for _, p in pairs(panelCache) do p:Hide() end
+        for key in pairs(sharedPanels) do panelCache[key] = nil end
+        for key in pairs(sharedIndex) do searchIndex[key] = nil end
+        cacheStash[cachedProfile] = { panels = panelCache, index = searchIndex, gen = cachedGen, mode = indexedMode }
+        local saved = cacheStash[cur]
+        cacheStash[cur] = nil
+        if saved and saved.gen == gen then
+            panelCache, searchIndex, indexedMode = saved.panels, saved.index, saved.mode
+        else
+            if saved then disposePanels(saved.panels) end
+            panelCache, searchIndex, indexedMode = {}, {}, nil
+        end
+    elseif cachedProfile and cachedGen ~= gen then
+        disposePanels(panelCache)
+        panelCache, searchIndex, indexedMode = {}, {}, nil
+    end
+    for key, p in pairs(sharedPanels) do panelCache[key] = p end
+    for key, ctx in pairs(sharedIndex) do searchIndex[key] = ctx end
+    cachedProfile, cachedGen = cur, gen
+    for id in pairs(cacheStash) do
+        if not P.Exists(id) then
+            disposePanels(cacheStash[id].panels)
+            cacheStash[id] = nil
+        end
+    end
     if window and window:IsShown() and activeTab then SelectTab(activeTab) end
 end)
 
@@ -3956,12 +4141,13 @@ local function BuildModeBar()
     N:On("NUCLEUS_TEST_MODE", syncTest)
 end
 
--- Resource read-out: CPU per frame, share of the frame budget and memory.
 
 local Prof      = _G.C_AddOnProfiler
 local CPU_METRIC = Enum and Enum.AddOnProfilerMetric and Enum.AddOnProfilerMetric.RecentAverageTime
 local GetMem    = _G.GetAddOnMemoryUsage    or (C_AddOns and C_AddOns.GetAddOnMemoryUsage)
 local UpdMem    = _G.UpdateAddOnMemoryUsage or (C_AddOns and C_AddOns.UpdateAddOnMemoryUsage)
+
+local memTick = 0
 
 local function UpdateStats()
     if not statsText then return end
@@ -3975,7 +4161,8 @@ local function UpdateStats()
     end
 
     if UpdMem and GetMem then
-        UpdMem()
+        memTick = memTick + 1
+        if memTick % 5 == 1 then UpdMem() end
         local kb = GetMem(ns.ADDON) or 0
         parts[#parts + 1] = kb >= 1024 and string.format("%.1f MB", kb / 1024)
             or string.format("%.0f KB", kb)

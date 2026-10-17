@@ -490,7 +490,7 @@ local function engineSpec(b, e)
         perRow = e.perRow, lineSpacing = e.lineSpacing,
         size = e.size, max = max, width = e.width, height = e.height, color = e.color,
         thickness = e.thickness, opacity = e.opacity, around = e.around, fill = e.fill,
-        cd = e.showCooldown and (e.cdStyle or "spiral") or "none",
+        cd = e.showCooldown and N.CooldownStyle(b.groupKey, e.cdStyle) or "none",
         stacks = e.showStacks, time = e.showTime,
         timeSize = e.timeSize, timeX = e.timeX, timeY = e.timeY,
         stackSize = e.stackSize, stackX = e.stackX, stackY = e.stackY,
