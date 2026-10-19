@@ -8,6 +8,7 @@
 <img src="https://img.shields.io/github/last-commit/NeeRgY/Nucleus?style=for-the-badge" />
 <img src="https://img.shields.io/github/issues/NeeRgY/Nucleus?style=for-the-badge" />
 <img src="https://img.shields.io/github/stars/NeeRgY/Nucleus?style=for-the-badge" />
+<a href="https://www.curseforge.com/wow/addons/nucleus"><img src="https://img.shields.io/curseforge/dt/1723779?style=for-the-badge&logo=curseforge&label=CurseForge&color=F16436" /></a>
 <br><br>
 
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/neergy)
