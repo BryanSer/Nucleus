@@ -612,8 +612,52 @@ local function setDeficitText(b, fs)
     if s then fs:SetFormattedText("-%s", s) else fs:SetText("") end
 end
 
+-- Blank the text at 100%; with hidden health a curve the game evaluates drives the text alpha instead.
+local fullCurve
+local function fullHealthCurve()
+    if fullCurve == nil then
+        fullCurve = false
+        if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
+            local cv = C_CurveUtil.CreateColorCurve()
+            cv:AddPoint(0, CreateColor(1, 1, 1, 1))
+            cv:AddPoint(0.999, CreateColor(1, 1, 1, 1))
+            cv:AddPoint(1, CreateColor(1, 1, 1, 0))
+            fullCurve = cv
+        end
+    end
+    return fullCurve or nil
+end
+
+local function hideWhenFull(b, fs, o)
+    if not o.hideAtFull then
+        fs:SetAlpha(1)
+        return false
+    end
+    local frac = b.unit and N.HealthFraction(b.unit)
+    if frac then
+        fs:SetAlpha(1)
+        if frac >= 1 then fs:SetText(""); return true end
+        return false
+    end
+    local curve = fullHealthCurve()
+    if curve and b.unit and b.healCalc and _G.UnitGetDetailedHealPrediction then
+        local ok, a = pcall(function()
+            UnitGetDetailedHealPrediction(b.unit, nil, b.healCalc)
+            local _, _, _, al = b.healCalc:EvaluateCurrentHealthPercent(curve):GetRGBA()
+            return al
+        end)
+        if ok and a ~= nil then
+            fs:SetAlpha(a)
+            return false
+        end
+    end
+    fs:SetAlpha(1)
+    return false
+end
+
 -- All health-text formats; secret numbers can't be read but can be formatted into a FontString.
 local function setHealthText(b, fs, o)
+    if hideWhenFull(b, fs, o) then return end
     local mode = o.format or "percent"
     if mode == "custom" then
         applyCustomFormat(fs, o.customFormat, b.hp, b.hpMax, hpPercent(b))
@@ -723,8 +767,9 @@ end
 
 local function renderPower(b, ind)
     if b.power:IsShown() then
-        b.power:SetMinMaxValues(0, b.ppMax)
-        if b.connected then b.power:SetValue(b.pp) else b.power:SetValue(0) end
+        -- A unit that does not exist (Spotlight target without a target) reports no power at all.
+        b.power:SetMinMaxValues(0, type(b.ppMax) == "number" and b.ppMax or 1)
+        if b.connected and type(b.pp) == "number" then b.power:SetValue(b.pp) else b.power:SetValue(0) end
         b.power:SetStatusBarColor(powerRGB(b))
     end
 
@@ -963,6 +1008,20 @@ local function healthFadeCurve(threshold, dim)
     return fadeCurve
 end
 
+-- Friendly spell per class for "Range by spell"; classes without an entry use the standard check.
+local RANGE_SPELLS = {
+    PRIEST = { 2061, 17, 139 }, DRUID = { 8936, 774 }, PALADIN = { 19750, 85673 }, SHAMAN = { 8004, 77472 },
+    MONK = { 116670 }, EVOKER = { 361469, 355913 }, MAGE = { 1459 }, WARLOCK = { 20707 },
+}
+local rangeSpell
+local function pickRangeSpell()
+    rangeSpell = nil
+    local _, class = UnitClass("player")
+    for _, id in ipairs(RANGE_SPELLS[class] or {}) do
+        if IsPlayerSpell and IsPlayerSpell(id) then rangeSpell = id; break end
+    end
+end
+
 local function updateRange(b)
     if not b.unit or not UnitExists(b.unit) then return end
 
@@ -976,7 +1035,12 @@ local function updateRange(b)
     if me ~= nil and not N.IsSecret(me) and not me then me = UnitIsUnit(b.unit, "pet") end
     if me == nil or N.IsSecret(me) or not me then
         local checked
-        inRange, checked = UnitInRange(b.unit)
+        if rangeSpell and N.db[b.groupKey].appearance.rangeBySpell then
+            -- The answer may be a secret boolean; type() is safe on it. nil: the spell cannot judge this unit.
+            local sr = C_Spell.IsSpellInRange(rangeSpell, b.unit)
+            if type(sr) ~= "nil" then inRange, checked = sr, true end
+        end
+        if type(inRange) == "nil" then inRange, checked = UnitInRange(b.unit) end
         -- Pets: UnitInRange often says false for an unchecked range, so a pet only fades when the range was
         -- really checked.
         if b.unit:find("pet") and not (checked ~= nil and not N.IsSecret(checked) and checked) then
@@ -1021,7 +1085,13 @@ end
 -- (health fade, dead units, pets, frames that just appeared).
 local rangeFrame = CreateFrame("Frame")
 rangeFrame:RegisterEvent("UNIT_IN_RANGE_UPDATE")
-rangeFrame:SetScript("OnEvent", function(_, _, unit)
+rangeFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+rangeFrame:RegisterEvent("SPELLS_CHANGED")
+rangeFrame:SetScript("OnEvent", function(_, event, unit)
+    if event ~= "UNIT_IN_RANGE_UPDATE" then
+        pickRangeSpell()
+        return
+    end
     local set = unit and UF.ButtonsOfUnit(unit)
     if not set then return end
     for b in pairs(set) do
@@ -1031,7 +1101,8 @@ end)
 local rangeElapsed = 0
 rangeFrame:SetScript("OnUpdate", function(_, dt)
     rangeElapsed = rangeElapsed + dt
-    if rangeElapsed < math.max(N.db.core.rangeUpdateInterval or 0.5, 0.5) then return end
+    local bySpell = rangeSpell and (N.db.party.appearance.rangeBySpell or N.db.raid.appearance.rangeBySpell)
+    if rangeElapsed < math.max(N.db.core.rangeUpdateInterval or 0.5, bySpell and 0.2 or 0.5) then return end
     rangeElapsed = 0
     local all = UF.AllButtons()
     for n = 1, #all do

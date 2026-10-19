@@ -12,7 +12,8 @@ local GROUP_KEYS = {
     size     = { "width", "height", "spacing", "columnSpacing" },
     layout   = { "orientation", "reverse", "groupBy", "sortMethod", "unitsPerColumn", "maxColumns",
                  "attachEnabled", "attachSide", "attachGap", "attachShift", "ordering" },
-    position = { "point", "x", "y", "hostEnabled", "hostSide", "hostGap", "hostShift" },
+    position = { "point", "x", "y", "hostEnabled", "hostSide", "hostGap", "hostShift",
+                 "raidHostEnabled", "raidHostSide", "raidHostGap", "raidHostShift" },
 }
 
 local CATEGORIES = {

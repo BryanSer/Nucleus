@@ -1123,6 +1123,14 @@ local function syncEngine(b)
     b._engineLive = live and true or false
 end
 
+local function placeSlot(b, cfg, ic, i, n)
+    local ax, ay = edgeSign(cfg.point)
+    if cfg.point:find("BOTTOM") then ay = ay + N.PowerInset(b) end
+    local dx, dy = A.SlotOffset(i, cfg.size, cfg.spacing, cfg.lineSpacing, cfg.perRow, cfg.growth, cfg.point, n)
+    ic:ClearAllPoints()
+    ic:SetPoint(cfg.point, b, cfg.point, ax + dx + (cfg.x or 0), ay + dy + (cfg.y or 0))
+end
+
 function A.Layout(b)
     if not b._nucAuras then return end
     if engineOn(b) then
@@ -1134,9 +1142,7 @@ function A.Layout(b)
         local cfg = N.db[b.groupKey].auras[row.cfg]
         local pool = b._nucAuras[row.cfg]
         if not pool then pool = {}; b._nucAuras[row.cfg] = pool end
-        local ax, ay = edgeSign(cfg.point)
-        if cfg.point:find("BOTTOM") then ay = ay + N.PowerInset(b) end
-
+        pool._cenN = nil
         for i = 1, cfg.max do
             local ic = pool[i]
             if not ic then
@@ -1145,10 +1151,7 @@ function A.Layout(b)
             end
             ic:SetSize(cfg.size, cfg.size)
             styleTexts(ic, cfg)
-            ic:ClearAllPoints()
-            local dx, dy = A.SlotOffset(i, cfg.size, cfg.spacing, cfg.lineSpacing, cfg.perRow,
-                cfg.growth, cfg.point)
-            ic:SetPoint(cfg.point, b, cfg.point, ax + dx + (cfg.x or 0), ay + dy + (cfg.y or 0))
+            placeSlot(b, cfg, ic, i, cfg.max)
         end
         for i = cfg.max + 1, #pool do pool[i]:Hide() end
     end
@@ -1179,6 +1182,15 @@ function A.Update(b)
             else
                 collect(b.unit, row, cfg, list, b.groupKey)
             end
+            if cfg.growth == "CENTER" then
+                local n = math.min(#list, cfg.max)
+                if pool._cenN ~= n then
+                    pool._cenN = n
+                    for i = 1, cfg.max do
+                        if pool[i] then placeSlot(b, cfg, pool[i], i, n) end
+                    end
+                end
+            end
             local iconsOn = not (row.kind == "dispel" and cfg.showIcons == false)
             for i = 1, cfg.max do
                 local ic = pool[i]
@@ -1194,8 +1206,17 @@ end
 A.MakeIcon = makeIcon
 A.ApplyAura = apply
 -- Offset of the i-th icon of a row: horizontal rows wrap after perRow icons, vertical rows are one column.
-function A.SlotOffset(i, size, spacing, lineSpacing, perRow, growth, point)
+function A.SlotOffset(i, size, spacing, lineSpacing, perRow, growth, point, count)
     local idx = i - 1
+    if growth == "CENTER" then
+        local per = math.max(1, math.floor(perRow or 99))
+        local col, line = idx % per, math.floor(idx / per)
+        local inLine = math.max(1, math.min(per, (count or per) - line * per))
+        local dx = (col - (inLine - 1) / 2) * (size + spacing)
+        local dy = line * (size + (lineSpacing or spacing))
+        if not (point and point:find("BOTTOM")) then dy = -dy end
+        return dx, dy
+    end
     if growth == "UP" then return 0, idx * (size + spacing) end
     if growth == "DOWN" then return 0, -idx * (size + spacing) end
     local per = math.max(1, math.floor(perRow or 99))

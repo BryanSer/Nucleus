@@ -3,6 +3,24 @@ local N = ns.N
 
 N.Changelog = {
     {
+        version = "1.0.6",
+        date = "2026-10-19",
+        notes = {
+            "## New",
+            "Spotlight, own pet and group pet frames have separate settings for hanging on the group frames and on the raid frames (Attach to group frames, Attach to raid frames): each one has its own switch, side and offset, so a frame can be attached in one and free in the other.",
+            "New Centered growth direction for aura rows and custom icon indicators: the icons spread to both sides of the anchor point, for example below or above the frame.",
+            "Health Text: new Hide at full health option that blanks the text at 100% in every format (before, only Deficit was empty at full health).",
+            "New What's new window: after an update it shows the changes of the new version once. It can be switched off under General > Interface (Show what's new after an update); /nucnews opens it again.",
+            "Master profile: Nucleus asks whether to create a backup of a profile when it starts following the master, and before Sync now.",
+            "Dispel type colors: new buttons for colorblind-friendly colors and for the default colors.",
+            "Profile templates: when you create a new profile (Profile tab), you can start from Healer raid, Tank / DPS raid, Group (5 players) or Large raid (40 players) instead of the plain defaults.",
+            "## Fixes",
+            "Test mode shows the raid frames as the host of attached Spotlight and pet frames too.",
+            "Fixed a Lua error from the power bar of a Spotlight frame whose unit does not exist (for example Target without a target).",
+            "Fixed Group pets staying on the party and raid frames after Enabled was switched off while they are attached to their owners.",
+        },
+    },
+    {
         version = "1.0.5",
         date = "2026-10-17",
         notes = {

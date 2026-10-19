@@ -83,7 +83,7 @@ local function groupDefaults(overrides)
                            nameFormat = "full" }, -- Forever: "full" (First Surname) | "first" | "last"
             -- "custom" format: {p} percent, {v} value, {m} max, {d} deficit.
             healthText = { enabled = true,  size = 10, x = 0, y = 0, color = { 0.85, 0.85, 0.87 },
-                           format = "percent", customFormat = "{p}%",
+                           format = "percent", customFormat = "{p}%", hideAtFull = false,
                            position = "center", colorMode = "custom", outline = "thin" },
             -- Power Bar: height, which roles get one, offset, optional text.
             powerBar   = { enabled = false, height = 4, x = 0, y = 0,
@@ -264,8 +264,9 @@ local function petDefaults(o)
         showSolo = true,
         -- Attach to the owner's frame: side, gap and sideways shift.
         attachEnabled = true, attachSide = "RIGHT", attachGap = 2, attachShift = 0,
-        -- Hang on the party / raid frames instead of a free position.
+        -- Hang on the party frames (host*) or the raid frames (raidHost*) instead of a free position.
         hostEnabled = false, hostSide = "RIGHT", hostGap = 4, hostShift = 0,
+        raidHostEnabled = false, raidHostSide = "RIGHT", raidHostGap = 4, raidHostShift = 0,
         appearance = { healthColorMode = "custom", healthCustomColor = { 0.35, 0.75, 0.40 } },
         indicators = {
             role = { enabled = false }, leader = { enabled = false },
@@ -318,6 +319,8 @@ N.Defaults = {
     bindingPresets = { _list = true }, -- Click-Casting presets: [class][name] = bindings, shared by all profiles
     welcomeMessage = true, -- the "Nucleus loaded - version X" line in the chat at login / reload
     firstRunShown = false, -- the one-time welcome window has been shown
+    showWhatsNew = true,   -- show the "What's new" window once after an update
+    whatsNewSeen = "",     -- the version whose "What's new" window was shown last
     blizzFilterOff = false, -- one-time migration: Blizzard-classification fallback switched off
     -- One-time migrations (Core/Database.lua): the flag has to be listed here or the load prunes it.
     timeColorDefaulted = false,
@@ -392,6 +395,7 @@ N.Defaults = {
         width = 80, height = 40, spacing = 3,
         x = 24, y = -640,
         hostEnabled = false, hostSide = "RIGHT", hostGap = 4, hostShift = 0,
+        raidHostEnabled = false, raidHostSide = "RIGHT", raidHostGap = 4, raidHostShift = 0,
         units = { _list = true },
         indicators = { powerBar = { enabled = true } },
     }),

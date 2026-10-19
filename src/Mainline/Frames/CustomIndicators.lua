@@ -142,7 +142,7 @@ builders.icon = function(b)
             local ic = w.icons[i]
             if not ic then ic = A.MakeIcon(b.overlay); w.icons[i] = ic end
             ic:SetSize(size, size)
-            local dx, dy = A.SlotOffset(i, size, sp, e.lineSpacing, e.perRow, e.growth or "LEFT", e.point)
+            local dx, dy = A.SlotOffset(i, size, sp, e.lineSpacing, e.perRow, e.growth or "LEFT", e.point, #auras)
             anchorOf(b, e, ic, dx, dy)
             A.ApplyAura(ic, d, e, ROW, b.unit)
         end

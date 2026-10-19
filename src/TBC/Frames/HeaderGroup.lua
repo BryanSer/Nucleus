@@ -19,15 +19,23 @@ local HOST_SIDES = {
     TOP = { "BOTTOMLEFT", "TOPLEFT" }, BOTTOM = { "TOPLEFT", "BOTTOMLEFT" },
 }
 
+-- enabled, side, gap, shift of the set that applies now: raid frames in a raid, otherwise the group frames.
+local function hostSettings(cfg)
+    if IsInRaid() then return cfg.raidHostEnabled, cfg.raidHostSide, cfg.raidHostGap, cfg.raidHostShift end
+    return cfg.hostEnabled, cfg.hostSide, cfg.hostGap, cfg.hostShift
+end
+
 local function hostFor(key, cfg)
-    if not (HOSTED[key] and cfg and cfg.hostEnabled) then return nil end
+    if not (HOSTED[key] and cfg and hostSettings(cfg)) then return nil end
     if key ~= "spotlight" and cfg.attachEnabled then return nil end -- hanging on the owner wins
-    return (IsInRaid() and N.headers.raid) or N.headers.party or N.headers.raid
+    if IsInRaid() then return N.headers.raid end
+    return N.headers.party
 end
 
 local function hostPoints(cfg)
-    local side = HOST_SIDES[cfg.hostSide] and cfg.hostSide or "RIGHT"
-    local gap, shift = cfg.hostGap or 4, cfg.hostShift or 0
+    local _, hostSide, hostGap, hostShift = hostSettings(cfg)
+    local side = HOST_SIDES[hostSide] and hostSide or "RIGHT"
+    local gap, shift = hostGap or 4, hostShift or 0
     local x, y = gap, shift
     if side == "LEFT" then x, y = -gap, shift
     elseif side == "TOP" then x, y = shift, gap
@@ -988,6 +996,10 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, section, path)
                     local target = N.HeaderHolder(header) or header
                     UnregisterStateDriver(target, "visibility")
                     target:Hide()
+                    -- Group pets hanging on their owners live in a container of their own.
+                    if section == "groupPets" and N.headers.groupPetsAttached then
+                        N.headers.groupPetsAttached:Hide()
+                    end
                 end, "hide-" .. section)
             end
             return

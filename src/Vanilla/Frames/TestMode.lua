@@ -401,9 +401,16 @@ local function rebuild()
             end
             local kc = N.db[key]
             local hostKey = (key == "npc" and kc.attachEnabled) and (edited == "raid" and "raid" or "party") or nil
-            local hosted = (key == "ownPet" or key == "groupPets" or key == "spotlight") and kc.hostEnabled
+            local hosted = (key == "ownPet" or key == "groupPets" or key == "spotlight")
                 and not (key ~= "spotlight" and kc.attachEnabled)
-            if hosted then hostKey = (edited == "raid") and "raid" or "party" end
+            if hosted then
+                -- the raid frames when the raid is being tested, else the group frames; the other one
+                -- when only that one is switched on
+                local ctx = (edited == "raid" or extra.raid == true) and "raid" or "party"
+                local on = { party = kc.hostEnabled, raid = kc.raidHostEnabled }
+                if not on[ctx] then ctx = (ctx == "raid") and "party" or "raid" end
+                if on[ctx] then hostKey, hosted = ctx, ctx else hosted = nil end
+            end
             if hostKey then
                 buildKey(hostKey, true)
                 if containers[hostKey] then containers[hostKey]:Show() end
@@ -417,7 +424,11 @@ local function rebuild()
             if hostKey and built and containers[hostKey] then
                 local cfg = N.db[key]
                 local side, gap, shift = cfg.attachSide, cfg.attachGap or 2, cfg.attachShift or 0
-                if hosted then side, gap, shift = cfg.hostSide, cfg.hostGap or 4, cfg.hostShift or 0 end
+                if hosted == "raid" then
+                    side, gap, shift = cfg.raidHostSide, cfg.raidHostGap or 4, cfg.raidHostShift or 0
+                elseif hosted then
+                    side, gap, shift = cfg.hostSide, cfg.hostGap or 4, cfg.hostShift or 0
+                end
                 local s = NPC_SIDES[side] or NPC_SIDES.RIGHT
                 local x, y = gap, shift
                 if side == "LEFT" then x, y = -gap, shift

@@ -480,8 +480,52 @@ local function setDeficitText(b, fs)
     if s then fs:SetFormattedText("-%s", s) else fs:SetText("") end
 end
 
+-- Blank the text at 100%; with hidden health a curve the game evaluates drives the text alpha instead.
+local fullCurve
+local function fullHealthCurve()
+    if fullCurve == nil then
+        fullCurve = false
+        if C_CurveUtil and C_CurveUtil.CreateColorCurve and CreateColor then
+            local cv = C_CurveUtil.CreateColorCurve()
+            cv:AddPoint(0, CreateColor(1, 1, 1, 1))
+            cv:AddPoint(0.999, CreateColor(1, 1, 1, 1))
+            cv:AddPoint(1, CreateColor(1, 1, 1, 0))
+            fullCurve = cv
+        end
+    end
+    return fullCurve or nil
+end
+
+local function hideWhenFull(b, fs, o)
+    if not o.hideAtFull then
+        fs:SetAlpha(1)
+        return false
+    end
+    local frac = b.unit and N.HealthFraction(b.unit)
+    if frac then
+        fs:SetAlpha(1)
+        if frac >= 1 then fs:SetText(""); return true end
+        return false
+    end
+    local curve = fullHealthCurve()
+    if curve and b.unit and b.healCalc and _G.UnitGetDetailedHealPrediction then
+        local ok, a = pcall(function()
+            UnitGetDetailedHealPrediction(b.unit, nil, b.healCalc)
+            local _, _, _, al = b.healCalc:EvaluateCurrentHealthPercent(curve):GetRGBA()
+            return al
+        end)
+        if ok and a ~= nil then
+            fs:SetAlpha(a)
+            return false
+        end
+    end
+    fs:SetAlpha(1)
+    return false
+end
+
 -- All health-text formats; secret numbers can't be read but can be formatted into a FontString.
 local function setHealthText(b, fs, o)
+    if hideWhenFull(b, fs, o) then return end
     local mode = o.format or "percent"
     if mode == "custom" then
         applyCustomFormat(fs, o.customFormat, b.hp, b.hpMax, hpPercent(b))
@@ -586,8 +630,9 @@ end
 
 local function renderPower(b, ind)
     if b.power:IsShown() then
-        b.power:SetMinMaxValues(0, b.ppMax)
-        if b.connected then b.power:SetValue(b.pp) else b.power:SetValue(0) end
+        -- A unit that does not exist (Spotlight target without a target) reports no power at all.
+        b.power:SetMinMaxValues(0, type(b.ppMax) == "number" and b.ppMax or 1)
+        if b.connected and type(b.pp) == "number" then b.power:SetValue(b.pp) else b.power:SetValue(0) end
         b.power:SetStatusBarColor(powerRGB(b))
     end
 

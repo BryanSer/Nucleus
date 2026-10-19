@@ -80,10 +80,20 @@ local function start()
             },
         })
     end
-    if not N.db.firstRunShown then
+    local freshInstall = not N.db.firstRunShown
+    if freshInstall then
         N.db.firstRunShown = true
         C_Timer.After(3, showFirstRun)
     end
+    -- "What's new": once per new version; not on a fresh install or when switched off.
+    if N.db.whatsNewSeen ~= ns.VERSION then
+        N.db.whatsNewSeen = ns.VERSION
+        if not freshInstall and N.db.showWhatsNew ~= false and N.ShowWhatsNew then
+            C_Timer.After(4, N.ShowWhatsNew)
+        end
+    end
+    SLASH_NUCLEUSNEWS1 = "/nucnews"
+    SlashCmdList.NUCLEUSNEWS = function() if N.ShowWhatsNew then N.ShowWhatsNew() end end
     SLASH_NUCLEUSWELCOME1 = "/nucwelcome"
     SlashCmdList.NUCLEUSWELCOME = showFirstRun
 end

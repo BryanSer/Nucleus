@@ -190,6 +190,9 @@ local function BuildInterface(p)
     ui:AddRow(N.MakeCheckbox(ui, L["Show welcome message"],
         function() return N.db.welcomeMessage ~= false end,
         function(v) N:Set("welcomeMessage", v) end))
+    ui:AddRow(N.MakeCheckbox(ui, L["Show what's new after an update"],
+        function() return N.db.showWhatsNew ~= false end,
+        function(v) N:Set("showWhatsNew", v) end))
     ui:AddRow(ActionButton(ui, L["Debug console"], function() N.ShowDebugConsole() end))
     p:AddCard(ui)
 
@@ -775,42 +778,47 @@ local function BuildFramePosition(p, key)
     end
 
     if key == "ownPet" or key == "groupPets" or key == "spotlight" then
-        local hc = N.MakeCard(p, L["Attach to group frames"])
-        hc:AddRow(N.MakeCheckbox(hc, L["Attach to the group frames"],
-            function() return N.db[key].hostEnabled end,
-            function(v) N:Set(key .. ".hostEnabled", v) end))
-        local gapSlider, shiftSlider
-        local function relabelHost()
-            local side = N.db[key].hostSide
-            local sideways = (side == "LEFT" or side == "RIGHT")
-            if gapSlider then gapSlider.label:SetText(sideways and L["X offset"] or L["Y offset"]) end
-            if shiftSlider then shiftSlider.label:SetText(sideways and L["Y offset"] or L["X offset"]) end
+        for _, ctx in ipairs({ "party", "raid" }) do
+            local pre = (ctx == "raid") and "raidHost" or "host"
+            local hc = N.MakeCard(p, L[ctx == "raid" and "Attach to raid frames" or "Attach to group frames"])
+            hc:AddRow(N.MakeCheckbox(hc, L[ctx == "raid" and "Attach to the raid frames" or "Attach to the group frames"],
+                function() return N.db[key][pre .. "Enabled"] end,
+                function(v) N:Set(key .. "." .. pre .. "Enabled", v) end))
+            local gapSlider, shiftSlider
+            local function relabelHost()
+                local side = N.db[key][pre .. "Side"]
+                local sideways = (side == "LEFT" or side == "RIGHT")
+                if gapSlider then gapSlider.label:SetText(sideways and L["X offset"] or L["Y offset"]) end
+                if shiftSlider then shiftSlider.label:SetText(sideways and L["Y offset"] or L["X offset"]) end
+            end
+            hc:AddRow(N.MakeDropdown(hc, L[ctx == "raid" and "Side of the raid frames" or "Side of the group frames"], {
+                { value = "RIGHT", text = L["Right"] },
+                { value = "LEFT", text = L["Left"] },
+                { value = "TOP", text = L["Up"] },
+                { value = "BOTTOM", text = L["Down"] },
+            }, function() return N.db[key][pre .. "Side"] end,
+               function(v) N:Set(key .. "." .. pre .. "Side", v); relabelHost() end))
+            gapSlider = N.MakeSlider(hc, L["X offset"], -10, 60, 1,
+                function() return N.db[key][pre .. "Gap"] end,
+                function(v) N:Set(key .. "." .. pre .. "Gap", N.Round(v)) end)
+            hc:AddRow(gapSlider)
+            shiftSlider = N.MakeSlider(hc, L["Y offset"], -60, 60, 1,
+                function() return N.db[key][pre .. "Shift"] end,
+                function(v) N:Set(key .. "." .. pre .. "Shift", N.Round(v)) end)
+            hc:AddRow(shiftSlider)
+            relabelHost()
+            if ctx == "raid" then
+                local hh = N.FontString(hc, 11)
+                hh:SetPoint("TOPLEFT", hc, "TOPLEFT", N.CARD_PAD, hc._y)
+                hh:SetWidth(hc:GetWidth() - 2 * N.CARD_PAD)
+                hh:SetJustifyH("LEFT")
+                hh:SetTextColor(uc(M.color.textDim))
+                hh:SetText(key == "spotlight" and L["HOST_HINT"] or L["HOST_HINT_PET"])
+                hh:SetHeight(hh:GetStringHeight() + 4)
+                hc:SetHeight(-hc._y + hh:GetHeight() + N.CARD_PAD)
+            end
+            p:AddCard(hc)
         end
-        hc:AddRow(N.MakeDropdown(hc, L["Side of the group frames"], {
-            { value = "RIGHT", text = L["Right"] },
-            { value = "LEFT", text = L["Left"] },
-            { value = "TOP", text = L["Up"] },
-            { value = "BOTTOM", text = L["Down"] },
-        }, function() return N.db[key].hostSide end,
-           function(v) N:Set(key .. ".hostSide", v); relabelHost() end))
-        gapSlider = N.MakeSlider(hc, L["X offset"], -10, 60, 1,
-            function() return N.db[key].hostGap end,
-            function(v) N:Set(key .. ".hostGap", N.Round(v)) end)
-        hc:AddRow(gapSlider)
-        shiftSlider = N.MakeSlider(hc, L["Y offset"], -60, 60, 1,
-            function() return N.db[key].hostShift end,
-            function(v) N:Set(key .. ".hostShift", N.Round(v)) end)
-        hc:AddRow(shiftSlider)
-        relabelHost()
-        local hh = N.FontString(hc, 11)
-        hh:SetPoint("TOPLEFT", hc, "TOPLEFT", N.CARD_PAD, hc._y)
-        hh:SetWidth(hc:GetWidth() - 2 * N.CARD_PAD)
-        hh:SetJustifyH("LEFT")
-        hh:SetTextColor(uc(M.color.textDim))
-        hh:SetText(key == "spotlight" and L["HOST_HINT"] or L["HOST_HINT_PET"])
-        hh:SetHeight(hh:GetStringHeight() + 4)
-        hc:SetHeight(-hc._y + hh:GetHeight() + N.CARD_PAD)
-        p:AddCard(hc)
     end
 
     if key == "party" or key == "raid" then
@@ -1232,6 +1240,8 @@ local function BuildIndicator(p, key, meta)
         }, function() return o.format end, function(v) N:Set(pth("format"), v) end))
         c:AddRow(N.MakeTextInput(c, L["CUSTOM_FORMAT_LABEL"],
             function() return o.customFormat end, function(v) N:Set(pth("customFormat"), v) end))
+        c:AddRow(N.MakeCheckbox(c, L["Hide at full health"],
+            function() return o.hideAtFull end, function(v) N:Set(pth("hideAtFull"), v) end))
     end
 
     if meta.absorbFormat then
@@ -1607,6 +1617,7 @@ local function BuildAuras(p, key, kind)
         { value = "LEFT", text = L["Left"] },
         { value = "UP", text = L["Up"] },
         { value = "DOWN", text = L["Down"] },
+        { value = "CENTER", text = L["Centered"] },
     }, function() return o.growth end, function(v) N:Set(pth("growth"), v) end))
     c:AddRow(N.MakeSlider(c, L["X offset"], -40, 40, 1,
         function() return o.x end, function(v) N:Set(pth("x"), N.Round(v)) end))
@@ -1711,6 +1722,7 @@ local function BuildAuras(p, key, kind)
         local cc = N.MakeCard(p, L["Dispel type colors"])
         local TYPE_DEFAULT = { Magic = { 0.2, 0.6, 1 }, Curse = { 0.6, 0, 1 }, Disease = { 0.6, 0.4, 0 },
                                Poison = { 0, 0.6, 0 }, Bleed = { 1, 0.2, 0.6 } }
+        local rows = {}
         for _, token in ipairs({ "Magic", "Curse", "Disease", "Poison", "Bleed" }) do
             local row = N.MakeColorPicker(cc, L["DTYPE_" .. token],
                 function() return (o.typeColors and o.typeColors[token]) or TYPE_DEFAULT[token] end,
@@ -1727,8 +1739,18 @@ local function BuildAuras(p, key, kind)
                 N:Set(pth("typeColors." .. token), { d[1], d[2], d[3] })
                 row.Refresh()
             end)
+            rows[#rows + 1] = row
             cc:AddRow(row)
         end
+        -- Colorblind-friendly set (blue, purple, orange, green, vermillion).
+        local SAFE = { Magic = { 0.00, 0.45, 0.70 }, Curse = { 0.80, 0.47, 0.65 }, Disease = { 0.90, 0.62, 0.00 },
+                       Poison = { 0.00, 0.62, 0.45 }, Bleed = { 0.84, 0.37, 0.00 } }
+        local function setAll(set)
+            for token, c in pairs(set) do N:Set(pth("typeColors." .. token), { c[1], c[2], c[3] }) end
+            for _, r in ipairs(rows) do r.Refresh() end
+        end
+        cc:AddRow(ActionButton(cc, L["Colorblind-friendly colors"], function() setAll(SAFE) end))
+        cc:AddRow(ActionButton(cc, L["Default colors"], function() setAll(TYPE_DEFAULT) end))
         p:AddCard(cc)
     end
 
@@ -2541,6 +2563,7 @@ local function BuildCustom(p, mode, id)
                 look:AddRow(N.MakeDropdown(look, L["Growth direction"], {
                     { value = "RIGHT", text = L["Right"] }, { value = "LEFT", text = L["Left"] },
                     { value = "UP", text = L["Up"] }, { value = "DOWN", text = L["Down"] },
+                    { value = "CENTER", text = L["Centered"] },
                 }, function() return entry.growth end, function(v) set("growth", v) end))
             end
             position(look)
@@ -3276,8 +3299,7 @@ local function BuildAbout(p)
     p:AddCard(sup)
 end
 
-local function BuildChangelog(p)
-    local c = N.MakeCard(p, L["Changelog"])
+local function FillChangelog(c, entries)
     local HEAD_COLOR = { New = "ff7bd88f", Performance = "ffe6b450", Fixes = "ffe06c75" }
     local width = c:GetWidth() - 2 * N.CARD_PAD
     local y = -N.CARD_TOP
@@ -3291,7 +3313,7 @@ local function BuildChangelog(p)
         fs:SetText(text)
         y = y - fs:GetStringHeight()
     end
-    for _, entry in ipairs(N.Changelog) do
+    for _, entry in ipairs(entries) do
         add(15, string.format("|cff61aef7%s|r  |cff8a8a8a%s|r", entry.version, entry.date), 10)
         local bullets = {}
         local function flush()
@@ -3309,6 +3331,11 @@ local function BuildChangelog(p)
         flush()
     end
     c:SetHeight(-y + N.CARD_PAD)
+end
+
+local function BuildChangelog(p)
+    local c = N.MakeCard(p, L["Changelog"])
+    FillChangelog(c, N.Changelog)
     p:AddCard(c)
 end
 
@@ -4644,6 +4671,26 @@ local function BuildPopupShell(frameName, titleText, width, height)
     return win, child, title
 end
 N.BuildPopupShell = BuildPopupShell
+
+-- The newest changelog entry in a window of its own, shown once after an update (Bootstrap.lua).
+local whatsNewWin
+function N.ShowWhatsNew()
+    local entry = N.Changelog and N.Changelog[1]
+    if not entry then return end
+    if not whatsNewWin then
+        local win, child = BuildPopupShell("NucleusWhatsNew", L["What's new"], 480, 460)
+        local c = N.MakeCard(child, L["Changelog"])
+        FillChangelog(c, { entry })
+        child:AddCard(c)
+        local o = N.MakeCard(child, L["General"])
+        o:AddRow(N.MakeCheckbox(o, L["Show what's new after an update"],
+            function() return N.db.showWhatsNew ~= false end,
+            function(v) N:Set("showWhatsNew", v) end))
+        child:AddCard(o)
+        whatsNewWin = win
+    end
+    whatsNewWin:Show()
+end
 
 local function AddPopupHint(child, cardW, text)
     local hint = N.FontString(child, 11)

@@ -691,9 +691,15 @@ local function anchor(h)
     local shape = spec.shape
     -- A horizontal row that wraps (perRow < max) stacks its lines away from the anchored edge.
     local perRow = spec.perRow and math.max(1, math.min(spec.perRow, spec.max or 1)) or nil
-    local wraps = perRow and perRow < (spec.max or 1) and (growth == "LEFT" or growth == "RIGHT")
-    local linesUp = growth == "UP" or (wraps and point:find("BOTTOM") ~= nil)
-    if shape == "icon" or shape == "rect" or shape == "bar" or shape == "dispel" then
+    local centered = growth == "CENTER" and (shape == "icon" or shape == "rect" or shape == "bar")
+    local wraps = perRow and perRow < (spec.max or 1) and (growth == "LEFT" or growth == "RIGHT" or centered)
+    local linesUp = growth == "UP" or ((wraps or centered) and point:find("BOTTOM") ~= nil)
+    if centered then
+        -- The container sizes to its content, so pinning its middle centers the row.
+        local mid = point:find("TOP") and "TOP" or point:find("BOTTOM") and "BOTTOM" or "CENTER"
+        flowPoint = linesUp and "BOTTOMLEFT" or "TOPLEFT"
+        c:SetPoint(mid, b, point, ax + (spec.x or 0), ay + (spec.y or 0))
+    elseif shape == "icon" or shape == "rect" or shape == "bar" or shape == "dispel" then
         flowPoint = (linesUp and "BOTTOM" or "TOP") .. ((growth == "LEFT") and "RIGHT" or "LEFT")
         local px = point:find("LEFT") and 0 or point:find("RIGHT") and w or w / 2
         local py = point:find("TOP") and 0 or point:find("BOTTOM") and hgt or hgt / 2

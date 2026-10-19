@@ -15,6 +15,13 @@ local function InitDB()
     -- Profiles.Setup merges defaults and installs the N.db proxy. First, the old power bar switches (tanks /
     -- healers / damage dealers) become the per-class table.
     N.Profiles.PreNormalize = function(tbl)
+        for _, k in ipairs({ "ownPet", "groupPets", "spotlight" }) do
+            local g = type(tbl[k]) == "table" and tbl[k]
+            if g and g.raidHostEnabled == nil and g.hostEnabled ~= nil then
+                g.raidHostEnabled, g.raidHostSide = g.hostEnabled, g.hostSide
+                g.raidHostGap, g.raidHostShift = g.hostGap, g.hostShift
+            end
+        end
         for _, k in ipairs({ "party", "raid", "ownPet", "groupPets", "npc", "spotlight" }) do
             local pb = type(tbl[k]) == "table" and type(tbl[k].indicators) == "table" and tbl[k].indicators.powerBar
             if type(pb) == "table" and (pb.showTank == false or pb.showHealer == false or pb.showDamager == false) then

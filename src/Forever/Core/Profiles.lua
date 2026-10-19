@@ -225,11 +225,79 @@ function P.Switch(name)
     return true
 end
 
-function P.Create(name, copyFrom)
+-- Starting points for new profiles (Profile > New): settings laid over the defaults. Only keys the profile
+-- already has are set, so one list serves every client.
+P.TEMPLATES = {
+    { id = "healer", label = "TPL_healer", data = {
+        party = { width = 104, height = 48, spacing = 3,
+            indicators = { powerBar = { enabled = true }, role = { enabled = true }, leader = { enabled = true },
+                           raidMarker = { enabled = true } },
+            auras = { buffs = { enabled = true, max = 4 }, debuffs = { enabled = true, max = 3 },
+                      dispels = { enabled = true }, defensives = { enabled = true }, externals = { enabled = true } } },
+        raid = { width = 80, height = 40, spacing = 2, columnSpacing = 2, unitsPerColumn = 5,
+            indicators = { role = { enabled = true }, leader = { enabled = true }, raidMarker = { enabled = true } },
+            auras = { buffs = { enabled = true, max = 3 }, debuffs = { enabled = true, max = 3 },
+                      dispels = { enabled = true }, defensives = { enabled = true, max = 2 },
+                      externals = { enabled = true, max = 2 } } },
+    } },
+    { id = "tankdps", label = "TPL_tankdps", data = {
+        party = { width = 96, height = 38, spacing = 2,
+            indicators = { powerBar = { enabled = false }, healthText = { enabled = false }, role = { enabled = true } },
+            auras = { buffs = { enabled = false }, debuffs = { enabled = true, max = 3 }, dispels = { enabled = true },
+                      defensives = { enabled = false }, externals = { enabled = false } } },
+        raid = { width = 70, height = 30, spacing = 1, columnSpacing = 2,
+            indicators = { powerBar = { enabled = false }, healthText = { enabled = false }, role = { enabled = false } },
+            auras = { buffs = { enabled = false }, debuffs = { enabled = true, max = 3 }, dispels = { enabled = true },
+                      defensives = { enabled = false }, externals = { enabled = false } } },
+    } },
+    { id = "party", label = "TPL_party", data = {
+        party = { width = 120, height = 56, spacing = 4,
+            indicators = { powerBar = { enabled = true }, healthText = { enabled = true }, role = { enabled = true },
+                           leader = { enabled = true }, readyCheck = { enabled = true }, raidMarker = { enabled = true } },
+            auras = { buffs = { enabled = true, max = 4 }, debuffs = { enabled = true, max = 4, size = 22 },
+                      dispels = { enabled = true }, defensives = { enabled = true }, externals = { enabled = true },
+                      crowdControls = { enabled = true, max = 2 } } },
+    } },
+    { id = "large", label = "TPL_large", data = {
+        raid = { width = 56, height = 26, spacing = 1, columnSpacing = 2, unitsPerColumn = 5,
+            groupsPerRow = 4, rowSpacing = 2,
+            indicators = { powerBar = { enabled = false }, healthText = { enabled = false },
+                           role = { enabled = true, size = 9 }, leader = { enabled = true, size = 8 },
+                           name = { size = 9 } },
+            auras = { buffs = { enabled = false }, debuffs = { enabled = true, max = 2, size = 14 },
+                      dispels = { enabled = true }, defensives = { enabled = false }, externals = { enabled = false },
+                      crowdControls = { enabled = false } } },
+    } },
+}
+
+local function overlay(dst, src)
+    for k, v in pairs(src) do
+        if type(v) == "table" then
+            if type(dst[k]) == "table" then overlay(dst[k], v) end
+        elseif dst[k] ~= nil then
+            dst[k] = v
+        end
+    end
+end
+
+function P.ApplyTemplate(profile, id)
+    for _, t in ipairs(P.TEMPLATES) do
+        if t.id == id then
+            for key, data in pairs(t.data) do
+                if type(profile[key]) == "table" then overlay(profile[key], data) end
+            end
+            return true
+        end
+    end
+    return false
+end
+
+function P.Create(name, copyFrom, template)
     name = cleanName(name)
     if not name or raw.profiles[name] then return nil end
     local src = copyFrom and raw.profiles[copyFrom]
     raw.profiles[name] = normalizeProfile(src and N.DeepCopy(src) or {})
+    if not src and template then P.ApplyTemplate(raw.profiles[name], template) end
     N:Fire("NUCLEUS_PROFILES_CHANGED")
     return name
 end
@@ -240,7 +308,8 @@ local SYNC_FIELDS = {
     size     = { "width", "height", "spacing", "columnSpacing" },
     layout   = { "orientation", "reverse", "groupBy", "sortMethod", "unitsPerColumn", "maxColumns",
                  "attachEnabled", "attachSide", "attachGap", "attachShift", "ordering" },
-    position = { "point", "x", "y", "hostEnabled", "hostSide", "hostGap", "hostShift" },
+    position = { "point", "x", "y", "hostEnabled", "hostSide", "hostGap", "hostShift",
+                 "raidHostEnabled", "raidHostSide", "raidHostGap", "raidHostShift" },
 }
 local SYNC_TABLES = { appearance = "appearance", indicators = "indicators", auras = "auras", custom = "customIndicators" }
 P.SYNC_GROUP_PARTS = { "size", "layout", "position", "appearance", "indicators", "auras", "custom" }

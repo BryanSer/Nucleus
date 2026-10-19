@@ -389,6 +389,8 @@ local function ProfileOptions(withNoChange)
     return out
 end
 
+local newTemplate = "none"
+
 local function BuildProfiles(p)
     local P = N.Profiles
 
@@ -400,10 +402,14 @@ local function BuildProfiles(p)
             -- the next situation change (zone, group, spec) re-evaluates it.
             P.Switch(v)
         end))
+    local tplOptions = { { value = "none", text = L["TPL_none"] } }
+    for _, t in ipairs(P.TEMPLATES) do tplOptions[#tplOptions + 1] = { value = t.id, text = L[t.label] } end
+    c:AddRow(N.MakeDropdown(c, L["Template for new profiles"], tplOptions,
+        function() return newTemplate end, function(v) newTemplate = v end))
     c:AddRow(ButtonRow(c, {
         { L["New"], function()
             PromptName(L["PROFILE_NAME_NEW"], "", function(text)
-                local name = P.Create(P.CleanName(text) or "", nil)
+                local name = P.Create(P.CleanName(text) or "", nil, newTemplate ~= "none" and newTemplate or nil)
                 if name then P.Switch(name) else N:Print(L["PROFILE_NAME_TAKEN"]) end
             end)
         end },
@@ -608,7 +614,10 @@ local function BuildSync(p)
                     for i = #s.slaves, 1, -1 do
                         if s.slaves[i] == name then table.remove(s.slaves, i) end
                     end
-                    if v then s.slaves[#s.slaves + 1] = name end
+                    if v then
+                        s.slaves[#s.slaves + 1] = name
+                        N.Dialog.Confirm(L["SYNC_BACKUP_ONE"]:format(name), function() P.Backup(name, "before sync") end)
+                    end
                 end))
         end
     end
@@ -637,7 +646,18 @@ local function BuildSync(p)
         local n = #P.SyncSlaves()
         if n == 0 then N:Print(L["SYNC_NO_LINKED"]); return end
         N.Dialog.Confirm(L["SYNC_CONFIRM"]:format(s.master, n), function()
-            N:Print(L["SYNC_DONE"]:format(P.SyncNow(), s.master))
+            local function run() N:Print(L["SYNC_DONE"]:format(P.SyncNow(), s.master)) end
+            N.Dialog.Show({
+                title = L["Confirm"],
+                text = L["SYNC_BACKUP_ALL"]:format(n),
+                buttons = {
+                    { text = L["No"], onClick = run },
+                    { text = L["Yes"], primary = true, onClick = function()
+                        for _, name in ipairs(P.SyncSlaves()) do P.Backup(name, "before sync") end
+                        run()
+                    end },
+                },
+            })
         end)
     end } }))
     p:AddCard(other)
