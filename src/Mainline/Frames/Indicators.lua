@@ -144,7 +144,14 @@ local BROADCAST = {
 }
 
 local evFrame = CreateFrame("Frame")
+local UNIT_ARG = {} -- events whose first argument is a unit
 evFrame:SetScript("OnEvent", function(_, event, arg1)
+    if UNIT_ARG[event] then
+        -- Only reached without per-unit registration: units without a frame fire most of these.
+        if type(arg1) ~= "string" or not N.UnitFrame.ButtonsOfUnit(arg1) then return end
+        dispatch(event, not BROADCAST[event] and arg1 or nil)
+        return
+    end
     local unit
     if not BROADCAST[event] and type(arg1) == "string" and arg1:match("^[a-z]+%d*$") then
         unit = arg1
@@ -152,11 +159,40 @@ evFrame:SetScript("OnEvent", function(_, event, arg1)
     dispatch(event, unit)
 end)
 
+-- Unit events (UNIT_HEALTH, UNIT_AURA, ...) are registered per unit, only for units that have a frame: nameplates,
+-- targets and bosses never reach this code. Events without a unit stay on evFrame.
+local unitFrames, unitEventList = {}, {}
+local function unitOnEvent(_, event, unit)
+    dispatch(event, not BROADCAST[event] and unit or nil)
+end
+
+local function watchUnit(unit)
+    local f = unitFrames[unit]
+    if not f then
+        f = CreateFrame("Frame")
+        f:SetScript("OnEvent", unitOnEvent)
+        unitFrames[unit] = f
+    end
+    for _, ev in ipairs(unitEventList) do pcall(f.RegisterUnitEvent, f, ev, unit) end
+end
+
+local function unwatchUnit(unit)
+    local f = unitFrames[unit]
+    if f then f:UnregisterAllEvents() end
+end
+
 N:On("NUCLEUS_DB_READY", function()
-    local events = {}
-    for ev in pairs(byEvent) do events[#events + 1] = ev end
-    for _, ev in ipairs(events) do
-        evFrame:RegisterEvent(ev)
+    local perUnit = CreateFrame("Frame").RegisterUnitEvent ~= nil
+    for ev in pairs(byEvent) do
+        UNIT_ARG[ev] = ev:sub(1, 5) == "UNIT_"
+        if perUnit and UNIT_ARG[ev] then
+            unitEventList[#unitEventList + 1] = ev
+        else
+            evFrame:RegisterEvent(ev)
+        end
+    end
+    if perUnit and N.UnitFrame and N.UnitFrame.WatchUnits then
+        N.UnitFrame.WatchUnits(watchUnit, unwatchUnit)
     end
 end)
 
@@ -178,6 +214,7 @@ Indicators.builtins = {
     { name = "role", label = "Role Icon", icon = true, iconPosition = true },
     { name = "classSpec", label = "Class / Spec Icon", icon = true, iconPosition = true, classSpec = true },
     { name = "leader", label = "Leader Icon", icon = true, iconPosition = true },
+    { name = "raidRole", label = "Raid Role Icon", icon = true, iconPosition = true },
     { name = "readyCheck", label = "Ready Check", icon = true, iconPosition = true },
     { name = "raidMarker", label = "Raid Marker", icon = true, iconPosition = true },
     { name = "combatIcon", label = "Combat Icon", icon = true, iconPosition = true },
@@ -336,15 +373,69 @@ Indicators.Register("leader", {
     events = { "PARTY_LEADER_CHANGED", "GROUP_ROSTER_UPDATE" },
     create = function(b) return corner(b, "TOPRIGHT", 10) end,
     update = function(b, icon)
-        local lead
-        if b._mock then lead = b._mock.isLeader else lead = UnitIsGroupLeader(b.unit) end
+        local lead, assist
+        if b._mock then
+            lead = b._mock.isLeader
+        else
+            lead = UnitIsGroupLeader(b.unit)
+            if IsInRaid() and N.db[b.groupKey].indicators.leader.showAssist ~= false then
+                assist = UnitIsGroupAssistant(b.unit)
+            end
+        end
         if not N.IsSecret(lead) and lead then
             icon:SetTexture("Interface\\GroupFrame\\UI-Group-LeaderIcon")
+            icon:SetTexCoord(0, 1, 0, 1)
+            icon:Show()
+        elseif not N.IsSecret(assist) and assist then
+            icon:SetTexture("Interface\\GroupFrame\\UI-Group-AssistantIcon")
             icon:SetTexCoord(0, 1, 0, 1)
             icon:Show()
         else
             icon:Hide()
         end
+    end,
+})
+
+-- Main tank / main assist of the raid (raid assignments).
+Indicators.Register("raidRole", {
+    anchor = "BOTTOMRIGHT",
+    events = { "GROUP_ROSTER_UPDATE", "PLAYER_ROLES_ASSIGNED" },
+    create = function(b) return corner(b, "BOTTOMRIGHT", 10) end,
+    update = function(b, icon)
+        local role
+        if b._mock then
+            role = b._mock.raidRole
+            if role == "CYCLE" then
+                role = (math.floor(GetTime() / 1.5) % 2 == 0) and "MAINTANK" or "MAINASSIST"
+                if not b._roleTicker then
+                    b._roleTicker = C_Timer.NewTicker(1.5, function(t)
+                        if b:IsVisible() and b._mock then
+                            Indicators.UpdateOne(b, "raidRole")
+                        else
+                            t:Cancel()
+                            b._roleTicker = nil
+                        end
+                    end)
+                end
+            end
+        elseif b.unit and GetPartyAssignment and IsInRaid() then
+            if GetPartyAssignment("MAINTANK", b.unit) then
+                role = "MAINTANK"
+            elseif GetPartyAssignment("MAINASSIST", b.unit) then
+                role = "MAINASSIST"
+            end
+        end
+        local o = N.db[b.groupKey].indicators.raidRole
+        if role == "MAINTANK" and o.showTank ~= false then
+            icon:SetTexture("Interface\\GroupFrame\\UI-Group-MainTankIcon")
+        elseif role == "MAINASSIST" and o.showAssist ~= false then
+            icon:SetTexture("Interface\\GroupFrame\\UI-Group-MainAssistIcon")
+        else
+            icon:Hide()
+            return
+        end
+        icon:SetTexCoord(0, 1, 0, 1)
+        icon:Show()
     end,
 })
 
@@ -915,12 +1006,14 @@ N:On("NUCLEUS_DB_READY", function()
     if not (N.AuraCache and N.AuraCache.OnChange) then return end
     N.AuraCache.OnChange(function(unit)
         if not N.UnitFrame then return end
-        N.UnitFrame.ForEachButton(function(child)
-            if child.unit == unit and child._drinkAt then
+        local set = N.UnitFrame.ButtonsOfUnit(unit)
+        if not set then return end
+        for child in pairs(set) do
+            if child._drinkAt then
                 child._drinkAt = nil
                 Indicators.UpdateOne(child, "status")
             end
-        end)
+        end
     end)
 end)
 

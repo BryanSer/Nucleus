@@ -1224,6 +1224,18 @@ local function BuildIndicator(p, key, meta)
             function() return o.showSolo ~= false end, function(v) N:Set(pth("showSolo"), v) end))
     end
 
+    if meta.name == "leader" then
+        c:AddRow(N.MakeCheckbox(c, L["Show raid assistants"],
+            function() return o.showAssist ~= false end, function(v) N:Set(pth("showAssist"), v) end))
+    end
+
+    if meta.name == "raidRole" then
+        c:AddRow(N.MakeCheckbox(c, L["Show main tank"],
+            function() return o.showTank ~= false end, function(v) N:Set(pth("showTank"), v) end))
+        c:AddRow(N.MakeCheckbox(c, L["Show main assist"],
+            function() return o.showAssist ~= false end, function(v) N:Set(pth("showAssist"), v) end))
+    end
+
     if meta.classSpec then
         c:AddRow(N.MakeDropdown(c, L["Show"], {
             { value = "spec", text = L["Specialization icon"] },
@@ -1763,7 +1775,6 @@ local function BuildAuras(p, key, kind)
             rows[#rows + 1] = row
             cc:AddRow(row)
         end
-        -- Colorblind-friendly set (blue, purple, orange, green, vermillion).
         local SAFE = { Magic = { 0.00, 0.45, 0.70 }, Curse = { 0.80, 0.47, 0.65 }, Disease = { 0.90, 0.62, 0.00 },
                        Poison = { 0.00, 0.62, 0.45 }, Bleed = { 0.84, 0.37, 0.00 } }
         local function setAll(set)
@@ -3124,6 +3135,23 @@ local function BuildClickCasting(p)
         bindings = own
     end
     p:AddCard(scope)
+
+    local sr = N.MakeCard(p, L["Smart resurrection"])
+    sr:AddRow(N.MakeDropdown(sr, L["Smart resurrection"], {
+        { value = "off", text = L["SMARTRES_off"] },
+        { value = "normal", text = L["SMARTRES_normal"] },
+        { value = "combat", text = L["SMARTRES_combat"] },
+    }, function() return cc.smartRes or "off" end, function(v) N:Set("clickCasting.smartRes", v) end))
+    local srHint = N.FontString(sr, 11)
+    srHint:SetPoint("TOPLEFT", sr, "TOPLEFT", N.CARD_PAD, sr._y)
+    srHint:SetWidth(sr:GetWidth() - 2 * N.CARD_PAD)
+    srHint:SetJustifyH("LEFT")
+    srHint:SetTextColor(uc(M.color.textDim))
+    srHint:SetText(L["SMARTRES_HINT"])
+    srHint:SetHeight(srHint:GetStringHeight() + 4)
+    sr:SetHeight(-sr._y + srHint:GetHeight() + N.CARD_PAD)
+    p:AddCard(sr)
+
     if not bindings then
         local note = N.MakeCard(p, L["Bindings"])
         local fs = N.FontString(note, 11)

@@ -94,7 +94,6 @@ local function notify(unit)
 end
 
 local acFrame = CreateFrame("Frame")
-N.SafeRegister(acFrame, "UNIT_AURA")
 N.SafeRegister(acFrame, "GROUP_ROSTER_UPDATE")
 N.SafeRegister(acFrame, "PLAYER_ENTERING_WORLD")
 acFrame:SetScript("OnEvent", function(_, event, unit)
@@ -109,6 +108,31 @@ acFrame:SetScript("OnEvent", function(_, event, unit)
     if not e then return end
     e.dirty = true
     notify(unit)
+end)
+
+-- UNIT_AURA per unit with a frame; units without one (nameplates, targets, bosses) never reach this code. The cache
+-- of a unit that loses its frame is dropped, since it would miss changes from then on.
+local auraFrames = {}
+local function auraWatch(unit)
+    local f = auraFrames[unit]
+    if not f then
+        f = CreateFrame("Frame")
+        f:SetScript("OnEvent", acFrame:GetScript("OnEvent"))
+        auraFrames[unit] = f
+    end
+    pcall(f.RegisterUnitEvent, f, "UNIT_AURA", unit)
+end
+local function auraUnwatch(unit)
+    local f = auraFrames[unit]
+    if f then f:UnregisterAllEvents() end
+    cache[unit] = nil
+end
+N:On("NUCLEUS_DB_READY", function()
+    if CreateFrame("Frame").RegisterUnitEvent and N.UnitFrame and N.UnitFrame.WatchUnits then
+        N.UnitFrame.WatchUnits(auraWatch, auraUnwatch)
+    else
+        N.SafeRegister(acFrame, "UNIT_AURA")
+    end
 end)
 
 -- Class dispel capability; class level only, spec nuance is ignored.
@@ -141,7 +165,6 @@ local function parseList(str)
 end
 
 
--- Snaps UI units to whole pixels at the frame's scale, so 1px borders look even on every side.
 local function snap(frame, v)
     local PU = _G.PixelUtil
     if PU and PU.GetNearestPixelSize and frame and frame.GetEffectiveScale then
@@ -175,8 +198,6 @@ local function makeIcon(parent)
     if cd.SetSwipeColor then cd:SetSwipeColor(0, 0, 0, 0.6) end
     f.cd = cd
 
-    -- "Top to bottom" style: a dark mask growing down as the aura runs out (a vertical StatusBar fed with
-    -- elapsed time).
     local mask = CreateFrame("StatusBar", nil, f)
     mask:SetPoint("TOPLEFT", f, "TOPLEFT", snap(f, 1), snap(f, -1))
     mask:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", snap(f, -1), snap(f, 1))
@@ -1000,13 +1021,14 @@ function A.Create(b)
 end
 
 
+-- Aura changes arrive for every unit all the time: only the frames of that unit are looked up.
 AC.OnChange(function(unit)
     if not N.db or not N.UnitFrame then return end
-    N.UnitFrame.ForEachButton(function(child)
-        if child.unit and child.unit == unit and child:IsShown() then
-            A.Update(child)
-        end
-    end)
+    local set = N.UnitFrame.ButtonsOfUnit(unit)
+    if not set then return end
+    for child in pairs(set) do
+        if child:IsShown() then A.Update(child) end
+    end
 end)
 
 N:On("PLAYER_LOGIN", function() dispelSet = nil end)

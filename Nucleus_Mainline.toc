@@ -1,4 +1,4 @@
-## Interface: 120100, 120105
+## Interface: 120100, 120105, 120107
 ## Title: Nucleus
 ## Notes: Modern raid and party frames.
 ## Notes-deDE: Moderne Schlachtzugs- und Gruppenrahmen.
@@ -13,7 +13,7 @@
 ## Notes-zhTW: 現代化的團隊和隊伍框架。
 ## Author: NeRgY
 ## IconTexture: Interface\AddOns\Nucleus\Media\Textures\Logo
-## Version: 1.0.6
+## Version: 1.0.7
 ## OptionalDeps: LibSharedMedia-3.0
 ## SavedVariables: NucleusDB_Mainline
 ## X-Category: Unit Frames

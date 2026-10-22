@@ -519,7 +519,9 @@ end)
 
 N.AuraCache.OnChange(function(unit)
     if not (N.db and N.UnitFrame) then return end
-    N.UnitFrame.ForEachButton(function(child)
-        if child.unit == unit and child:IsShown() then Indicators.UpdateOne(child, "custom") end
-    end)
+    local set = N.UnitFrame.ButtonsOfUnit(unit)
+    if not set then return end
+    for child in pairs(set) do
+        if child:IsShown() then Indicators.UpdateOne(child, "custom") end
+    end
 end)

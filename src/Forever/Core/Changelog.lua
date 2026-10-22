@@ -3,6 +3,25 @@ local N = ns.N
 
 N.Changelog = {
     {
+        version = "1.0.7",
+        date = "2026-10-22",
+        notes = {
+            "## New",
+            "Click-Casting (Forever, Classic, TBC): new option Always cast the highest known rank, so a bound spell like Renew uses the newly trained rank without picking it again. Penance can now be picked as a spell binding (Forever).",
+            "New Raid Role Icon indicator (off by default): shows the main tank and main assist of the raid with Blizzard's icons, each one switchable.",
+            "The Leader Icon now also shows promoted raid members (assistants) with Blizzard's assistant icon; the leader keeps the crown. New option Show raid assistants turns it off.",
+            "New /nuctaintlog command: switches the game's taint log on or off, for bug reports about blocked-action errors.",
+            "## Performance",
+            "Less CPU in raids during fights: aura changes only look up the frames of the unit they belong to instead of going through every frame several times, and custom indicators are no longer redrawn on every aura change when the game's aura engine handles them.",
+            "Less CPU with many nameplates: the indicators ignore unit events of units that have no frame (enemy nameplates, targets, bosses) at once, and a retarget only updates the frames when a group member changed target.",
+            "Less CPU: the indicators and the aura cache only listen to unit events of units that have a frame (registered per unit), so events of enemy nameplates, targets and bosses no longer reach Nucleus at all.",
+            "## Fixes",
+            "Fixed a drop-down showing an old value after switching panels, for example the Frame type of the pet frames still reading NPC companions after a change to Own pet.",
+            "Group and raid frames: the header update is now started by the game itself instead of being called from our code, to avoid blocked-action errors after combat (Retail, Forever).",
+            "A Lua error in one part of Nucleus no longer stops the rest of an update: the Frame type drop down for pets and NPCs no longer gets stuck on the old page when something fails while switching, and the error is reported.",
+        },
+    },
+    {
         version = "1.0.6",
         date = "2026-10-19",
         notes = {

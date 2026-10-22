@@ -19,7 +19,6 @@ local function px_width(region, w)
     if PU and PU.SetWidth then PU.SetWidth(region, w) else region:SetWidth(w) end
 end
 
--- A single hairline separator on `parent`: dir "h" at y = off, "v" at x = off; a / b inset the ends.
 function N.Hairline(parent, dir, off, color, a, b)
     a, b = a or 0, b or 0
     local t = parent:CreateTexture(nil, "OVERLAY")
@@ -169,7 +168,6 @@ function N.SetPanelBorder(frame, color)
     end
 end
 
--- Turns a StatusBar into a flat bar with a dark loss region behind it and a 1px top highlight.
 function N.SkinBar(bar)
     bar:SetStatusBarTexture(M.flat)
     if not bar._nucLoss then

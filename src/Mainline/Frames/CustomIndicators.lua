@@ -577,9 +577,12 @@ N:On("NUCLEUS_SETTING_CHANGED", function(_, _, path)
     end
 end)
 
+-- With the aura engine the game updates the indicators itself; only the older path redraws on aura changes.
 N.AuraCache.OnChange(function(unit)
     if not (N.db and N.UnitFrame) then return end
-    N.UnitFrame.ForEachButton(function(child)
-        if child.unit == unit and child:IsShown() then Indicators.UpdateOne(child, "custom") end
-    end)
+    local set = N.UnitFrame.ButtonsOfUnit(unit)
+    if not set then return end
+    for child in pairs(set) do
+        if child:IsShown() and not engineOn(child) then Indicators.UpdateOne(child, "custom") end
+    end
 end)
