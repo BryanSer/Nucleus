@@ -10,7 +10,6 @@ local function unpackColor(c) return c[1], c[2], c[3], c[4] or 1 end
 local ROW_CHECK = 24
 local ROW_CONTROL = 30
 
--- Section card: the title on top, the rows stacked below with inner padding.
 
 local CARD_PAD = 12
 local CARD_HEADER = 32
@@ -556,6 +555,8 @@ function N.MakeDropdown(parent, label, options, get, set)
     setState(false, false)
     current:SetText(label_for(get()))
     f.Refresh = function() current:SetText(label_for(get())) end
+    -- Panels are cached: the value may have changed while this dropdown was hidden.
+    f:HookScript("OnShow", f.Refresh)
 
     N.OnRecolor(function()
         for _, row in ipairs(rows) do

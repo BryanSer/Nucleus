@@ -114,6 +114,7 @@ local function mockFor(i, key)
         aggro = (i == 1),
         role = roleOf(i, key),
         isLeader = (i == 1),
+        raidRole = (i == 2 and "MAINTANK") or (i == 3 and "MAINASSIST") or nil,
         isTarget = (i == 2),
         readyCheck = ({ "ready", "notready", "waiting" })[(i - 1) % 3 + 1],
         statusRez = (i % 6 == 0),
@@ -344,7 +345,7 @@ local function buildKey(key, force)
         local mock = mockFor(order and order[i] or i, key)
         if N.PET_KEYS[key] then
             mock.name = PET_NAMES[key][(i - 1) % #PET_NAMES[key] + 1]
-            mock.role, mock.isLeader, mock.readyCheck, mock.raidMarker = nil, false, nil, nil
+            mock.role, mock.isLeader, mock.readyCheck, mock.raidMarker, mock.raidRole = nil, false, nil, nil, nil
         end
         UF.ApplyMock(b, mock)
         b:SetAlpha(mock.outOfRange and (cfg.appearance.outOfRangeAlpha or 0.45) or 1)

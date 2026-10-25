@@ -11,13 +11,11 @@ M.barTextures = {
     flat     = "Interface\\Buttons\\WHITE8X8",
     gradient = "Interface\\TargetingFrame\\UI-StatusBar",
     modern   = "Interface\\RaidFrame\\Raid-Bar-Hp-Fill",
-    -- Default: uniform grey (NucleusBar3.tga), so SetStatusBarColor gives a flat, matte class color.
     nucleus  = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusBar3.tga",
     nucleus2 = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusBar2.tga",
     nucleus3 = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusBar.tga",
 }
 
--- Shield overlay textures: "flat" wash and "striped" (45-degree stripes in the alpha channel).
 M.shieldTextures = {
     flat    = "Interface\\Buttons\\WHITE8X8",
     striped = "Interface\\AddOns\\Nucleus\\Media\\Textures\\NucleusShield.tga",

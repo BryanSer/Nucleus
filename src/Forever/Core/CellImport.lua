@@ -1,7 +1,7 @@
 local _, ns = ...
 local N = ns.N
 
--- Cell profile import: builds a Nucleus profile from a Cell "Profile" export; whatever has no counterpart is
+-- Profile import: builds a Nucleus profile from an exported profile string; whatever has no counterpart is
 -- skipped and listed in the report.
 
 local CI = {}
@@ -87,7 +87,7 @@ local function place(pos)
     return point, sc(num(pos[4])), sc(num(pos[5]))
 end
 
--- Cell anchors an indicator with its own point on a point of the frame; here an object hangs on one point only,
+-- The source anchors an indicator with its own point on a point of the frame; here an object hangs on one point only,
 -- so the offset is corrected by the difference of the two points times its size.
 local function fx(p) return p:find("LEFT") and 0 or p:find("RIGHT") and 1 or 0.5 end
 local function fy(p) return p:find("BOTTOM") and 0 or p:find("TOP") and 1 or 0.5 end
@@ -107,7 +107,7 @@ local function placeFor(pos, w, h)
     return rel, x, y
 end
 
--- Size of an icon that may be a rectangle (Cell: 12 x 20): the average, plus width and height.
+-- Size of an icon that may be a rectangle (for example 12 x 20): the average, plus width and height.
 local function avgSize(s)
     local w, h = firstSize(s)
     if w and h then return math.floor((w + h) / 2 + 0.5), w, h end

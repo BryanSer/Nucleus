@@ -88,6 +88,7 @@ local INITIAL_CONFIG = [[
     self:SetAttribute("*type1", "target")
     self:SetAttribute("*type2", "togglemenu")
     self:SetAttribute("toggleForVehicle", true)
+    self:SetAttribute("ping-receiver", true)
 ]]
 
 local function forChildren(header, fn)
@@ -644,6 +645,7 @@ local function configure(header)
     end
 
     header:SetAttribute("template", "SecureUnitButtonTemplate")
+    header:SetAttribute("templateType", "Button")
     header:SetAttribute("initialConfigFunction",
         INITIAL_CONFIG:format(cfg.width, cfg.height))
 
@@ -778,9 +780,8 @@ local function configure(header)
     end
 
     applyChildSize(header)
-    if SecureGroupHeader_Update then
-        SecureGroupHeader_Update(header)
-    end
+    -- A changed attribute makes the header run its own update; calling the update from here would run it as our code.
+    header:SetAttribute("nucRefresh", (header:GetAttribute("nucRefresh") or 0) + 1)
     styleChildren(header)
     C_Timer.After(0, function() styleChildren(header) end)
     if key == "groupPets" then applyGroupPetsMode() end
@@ -1169,5 +1170,23 @@ do
         for _, line in ipairs(events) do N:Print("  " .. line) end
         N:Print("blocked actions (" .. #blocked .. "):")
         for _, line in ipairs(blocked) do N:Print("  " .. line) end
+    end
+end
+
+-- /nuctaintlog [on|off] [level]: switches the game's taint log (Logs/taint.log), for taint bug reports. Level 2 (the
+-- default) logs the most but makes the game raise errors of its own; level 1 is quieter.
+SLASH_NUCLEUSTAINTLOG1 = "/nuctaintlog"
+SlashCmdList.NUCLEUSTAINTLOG = function(msg)
+    local word, level = strsplit(" ", strlower(strtrim(msg or "")))
+    local want
+    if word == "on" then want = true
+    elseif word == "off" then want = false
+    else want = (tonumber(GetCVar("taintLog")) or 0) == 0 end
+    SetCVar("taintLog", want and (tonumber(level) == 1 and 1 or 2) or 0)
+    if want then
+        N:Print("taint log ON. Type /reload, play until the error appears, then post the Nucleus lines of "
+            .. "World of Warcraft/_retail_/Logs/taint.log. Switch it off again with /nuctaintlog off")
+    else
+        N:Print("taint log off")
     end
 end

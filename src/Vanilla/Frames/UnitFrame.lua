@@ -97,7 +97,6 @@ function UF.CreateVisual(b, key)
     N.SkinBar(power)
     b.power = power
 
-    -- Text, edges and indicator icons sit on this overlay, above the StatusBar children.
     local overlay = CreateFrame("Frame", nil, b)
     overlay:SetAllPoints(b)
     overlay:SetFrameLevel(math.max(health:GetFrameLevel(), power:GetFrameLevel()) + 4)
@@ -162,7 +161,6 @@ local function pOn(b, name, enabled)
     return enabled or b._previewOnly == name or (b._previewOnly == "actions" and name == "name")
 end
 
--- Font outline of a text indicator: thin (default), thick or none.
 local OUTLINES = { thin = "OUTLINE", thick = "THICKOUTLINE", none = "" }
 function UF.Outline(o)
     return OUTLINES[o and o.outline or "thin"] or "OUTLINE"
@@ -279,7 +277,6 @@ local function applyFrameBorder(b, cfg)
     right:SetPoint("TOPRIGHT", b, "TOPRIGHT", 0, -th)
     right:SetPoint("BOTTOMRIGHT", b, "BOTTOMRIGHT", 0, th)
     right:SetWidth(th)
-    -- The panel's own 1px outline would double up (or show when disabled).
     N.SetPanelBorder(b, { 0, 0, 0, 0 })
 end
 
@@ -349,13 +346,11 @@ function UF.LayoutBars(b)
     styleText(b.hpText, hp)
     b.nameText:SetWidth(textW)
     b.hpText:SetWidth(textW)
-    -- Name and health text stack in the middle by default; elsewhere they are placed independently.
     local stacked = pOn(b, "name", name.enabled) and pOn(b, "healthText", hp.enabled)
         and (name.position or "center") == "center" and (hp.position or "center") == "center"
     placeText(b.nameText, b.health, name, stacked and 6 or 0)
     placeText(b.hpText, b.health, hp, stacked and -6 or 0)
 
-    -- Power text sits on the health bar, since a 4px power bar has no room for text.
     b.powerText:SetFont(M.font, pb.textSize or 9, "OUTLINE")
     b.powerText:SetWidth(0)
     placeText(b.powerText, b.health, { position = pb.textPosition, x = pb.textX, y = pb.textY })
@@ -376,17 +371,32 @@ end
 
 -- Every styled button, and the buttons by the unit they show: the indicator events look them up here.
 local allButtons, byUnit = {}, {}
+local unitWatchers = {}
 local function mapUnit(b, old, new)
     local set = old and byUnit[old]
     if set then
         set[b] = nil
-        if not next(set) then byUnit[old] = nil end
+        if not next(set) then
+            byUnit[old] = nil
+            for i = 1, #unitWatchers do unitWatchers[i][2](old) end
+        end
     end
     if new then
         set = byUnit[new]
-        if not set then set = {}; byUnit[new] = set end
+        if not set then
+            set = {}
+            byUnit[new] = set
+            for i = 1, #unitWatchers do unitWatchers[i][1](new) end
+        end
         set[b] = true
     end
+end
+
+-- onNew(unit) runs when a unit gets its first frame (also for the units that have one already), onGone(unit)
+-- when it loses the last one. Unit events are only registered for these units.
+function UF.WatchUnits(onNew, onGone)
+    unitWatchers[#unitWatchers + 1] = { onNew, onGone }
+    for unit in pairs(byUnit) do onNew(unit) end
 end
 function UF.AllButtons() return allButtons end
 function UF.ButtonsOfUnit(unit) return byUnit[unit] end
@@ -575,7 +585,6 @@ local POWER_FALLBACK = {
     ESSENCE = { 0.20, 0.58, 0.50 },
 }
 local function powerRGB(b)
-    -- Hunters always get Focus's amber, never Energy's yellow; pets keep their own type.
     local t = b.ppType
     if type(t) == "string" and not N.IsSecret(t) then
         local fb = POWER_FALLBACK[t]

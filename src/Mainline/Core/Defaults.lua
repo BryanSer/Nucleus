@@ -127,6 +127,9 @@ local function groupDefaults(overrides)
             -- Class / spec icon: mode "class" | "spec" | "both", off by default.
             classSpec  = { enabled = false, position = "topleft", size = 12, x = 13, y = 0, mode = "spec" },
             leader     = { enabled = true,  position = "topright", size = 10, x = 0, y = 0 },
+            -- Raid role icon: main tank / main assist, off by default.
+            raidRole   = { enabled = false, position = "bottomright", size = 10, x = 0, y = 0,
+                           showTank = true, showAssist = true },
             readyCheck = { enabled = true,  position = "center", size = 16, x = 0, y = 0 },
             raidMarker    = { enabled = true,  position = "top", size = 14, x = 0,  y = 0 },
             -- Status Icon: `show` = kinds that may appear (Indicators.statusIconKinds).
@@ -473,6 +476,8 @@ N.Defaults = {
 
     -- Click-casting: global; kind = "none" | "spell" | "item" | "macro" | "general".
     clickCasting = {
+        -- Smart resurrection (Retail): "off" | "normal" | "combat" (also the combat resurrection of the class).
+        smartRes = "off",
 
         -- Left select and right menu: ordinary rows the user can change.
         bindings = {

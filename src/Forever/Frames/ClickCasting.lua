@@ -116,7 +116,11 @@ local function attrPairs(binding)
     end
     if not binding.value or binding.value == "" then return nil end
     if binding.kind == "spell" then
-        return typeAttr, "spell", prefix .. "spell" .. idx, binding.value
+        local spell = binding.value
+        if N.db.clickCasting.highestRank and type(spell) == "string" then
+            spell = spell:gsub("%s*%b()$", "")
+        end
+        return typeAttr, "spell", prefix .. "spell" .. idx, spell
     elseif binding.kind == "item" then
         -- Equipped item by slot ("slot:13"): a macro, so it follows swaps and works in combat.
         local slot = tostring(binding.value):match("^slot:(%d+)$")

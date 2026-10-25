@@ -94,6 +94,39 @@ end
 -- is a macro name.
 local PLAIN_ACTIONS = { target = "target", focus = "focus", menu = "togglemenu", assist = "assist" }
 
+-- Smart resurrection: a spell binding becomes a macro that casts the class's resurrection on a dead unit under
+-- the mouse and the bound spell on everyone else.
+local RES_SPELLS = {
+    PRIEST = { normal = 2006 }, PALADIN = { normal = 7328, combat = 391054 }, DRUID = { normal = 50769, combat = 20484 },
+    SHAMAN = { normal = 2008 }, MONK = { normal = 115178 }, EVOKER = { normal = 361227 },
+    DEATHKNIGHT = { combat = 61999 }, WARLOCK = { combat = 20707 },
+}
+
+local function knownSpellName(id)
+    if not (id and IsPlayerSpell and IsPlayerSpell(id)) then return nil end
+    return C_Spell.GetSpellName(id)
+end
+
+local function smartMacro(spell)
+    local mode = N.db.clickCasting.smartRes
+    if mode ~= "normal" and mode ~= "combat" then return nil end
+    local _, class = UnitClass("player")
+    local res = RES_SPELLS[class]
+    if not res then return nil end
+    local normal = knownSpellName(res.normal)
+    local combat = mode == "combat" and knownSpellName(res.combat) or nil
+    if not (normal or combat) then return nil end
+    local name = tonumber(spell) and C_Spell.GetSpellName(tonumber(spell)) or spell
+    if not name or name == "" then return nil end
+    local parts = {}
+    if normal then parts[#parts + 1] = "[@mouseover,help,dead,nocombat] " .. normal end
+    if combat then
+        parts[#parts + 1] = (normal and "[@mouseover,help,dead,combat] " or "[@mouseover,help,dead] ") .. combat
+    end
+    parts[#parts + 1] = "[@mouseover] " .. name
+    return "/cast " .. table.concat(parts, "; ")
+end
+
 local function attrPairs(binding)
     if not binding or binding.kind == "none" then return nil end
     local idx, prefix
@@ -116,6 +149,8 @@ local function attrPairs(binding)
     end
     if not binding.value or binding.value == "" then return nil end
     if binding.kind == "spell" then
+        local smart = smartMacro(binding.value)
+        if smart then return typeAttr, "macro", prefix .. "macrotext" .. idx, smart end
         return typeAttr, "spell", prefix .. "spell" .. idx, binding.value
     elseif binding.kind == "item" then
         -- Equipped item by slot ("slot:13"): a macro, so it follows swaps and works in combat.

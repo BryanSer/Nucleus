@@ -1228,6 +1228,18 @@ local function BuildIndicator(p, key, meta)
             function() return o.showSolo ~= false end, function(v) N:Set(pth("showSolo"), v) end))
     end
 
+    if meta.name == "leader" then
+        c:AddRow(N.MakeCheckbox(c, L["Show raid assistants"],
+            function() return o.showAssist ~= false end, function(v) N:Set(pth("showAssist"), v) end))
+    end
+
+    if meta.name == "raidRole" then
+        c:AddRow(N.MakeCheckbox(c, L["Show main tank"],
+            function() return o.showTank ~= false end, function(v) N:Set(pth("showTank"), v) end))
+        c:AddRow(N.MakeCheckbox(c, L["Show main assist"],
+            function() return o.showAssist ~= false end, function(v) N:Set(pth("showAssist"), v) end))
+    end
+
     if meta.format then
         c:AddRow(N.MakeDropdown(c, L["Format"], {
             { value = "percent", text = L["Percent"] },
@@ -1742,7 +1754,6 @@ local function BuildAuras(p, key, kind)
             rows[#rows + 1] = row
             cc:AddRow(row)
         end
-        -- Colorblind-friendly set (blue, purple, orange, green, vermillion).
         local SAFE = { Magic = { 0.00, 0.45, 0.70 }, Curse = { 0.80, 0.47, 0.65 }, Disease = { 0.90, 0.62, 0.00 },
                        Poison = { 0.00, 0.62, 0.45 }, Bleed = { 0.84, 0.37, 0.00 } }
         local function setAll(set)
@@ -2820,6 +2831,20 @@ local RES_SPELLS = {
     [20707] = true, [20762] = true, [20763] = true, [20764] = true, [20765] = true, [27239] = true,
 }
 
+-- Spells that heal friends and hurt enemies count as harmful to the game but belong in the list (Penance).
+local DUAL_IDS = { 1240720, 1240721, 1240723, 1240724, 1240727, 1240730, 1316991, 1316993, 1316995, 402284, 402289, 47540, 53005, 53006, 53007, 47757, 47758 }
+local dualNames
+local function isDualSpell(name)
+    if not dualNames then
+        dualNames = {}
+        for _, id in ipairs(DUAL_IDS) do
+            local ok, info = pcall(C_Spell.GetSpellInfo, id)
+            if ok and type(info) == "table" and info.name then dualNames[info.name] = true end
+        end
+    end
+    return dualNames[name]
+end
+
 -- Spells the player knows that are beneficial (can be cast on another player),
 -- one entry per rank.
 local function getSpellOptions()
@@ -2829,7 +2854,8 @@ local function getSpellOptions()
         local ok = true
         if helpful and item.spellID then
             local okCall, isHelpful = pcall(helpful, item.spellID)
-            if okCall and isHelpful == false and not DISPEL_SPELLS[item.spellID] and not RES_SPELLS[item.spellID] then ok = false end
+            if okCall and isHelpful == false and not DISPEL_SPELLS[item.spellID] and not RES_SPELLS[item.spellID]
+                and not isDualSpell(name) then ok = false end
         end
         local value = sub and (name .. "(" .. sub .. ")") or name
         if ok and not seen[value] then
@@ -3145,6 +3171,8 @@ local function BuildClickCasting(p)
             end))
         bindings = own
     end
+    scope:AddRow(N.MakeCheckbox(scope, L["Always cast the highest known rank"],
+        function() return cc.highestRank end, function(v) N:Set("clickCasting.highestRank", v) end))
     p:AddCard(scope)
     if not bindings then
         local note = N.MakeCard(p, L["Bindings"])
